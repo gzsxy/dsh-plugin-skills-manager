@@ -10,7 +10,7 @@
 import { readFile, readdir, stat, mkdir, writeFile, rm, rename } from "node:fs/promises";
 import { spawnSync } from "node:child_process";
 import { homedir, tmpdir } from "node:os";
-import { join, dirname, resolve as resolvePath } from "node:path";
+import { join, dirname, sep, resolve as resolvePath } from "node:path";
 import { fileURLToPath } from "node:url";
 
 export const name = "dsh-plugin-skills-manager";
@@ -225,21 +225,42 @@ const treeCache = new Map();
 const TREE_TTL_MS = 10 * 60 * 1000;
 
 async function getRepoTree(repo, ref) {
-  const key = `${repo}@${ref}`;
-  const hit = treeCache.get(key);
-  if (hit && Date.now() - hit.ts < TREE_TTL_MS) return hit.tree;
   const meta = await fetchJson(`${GH_API}/repos/${repo}`);
   const branch = ref || meta.default_branch || "main";
+  const key = `${repo}@${branch}`;
+  const hit = treeCache.get(key);
+  if (hit && Date.now() - hit.ts < TREE_TTL_MS) return { tree: hit.tree, branch };
   const data = await fetchJson(`${GH_API}/repos/${repo}/git/trees/${encodeURIComponent(branch)}?recursive=1`);
   if (!Array.isArray(data.tree)) throw new Error("仓库树读取失败");
   treeCache.set(key, { tree: data.tree, ts: Date.now() });
-  return data.tree;
+  return { tree: data.tree, branch };
+}
+
+// 批量抓取 SKILL.md 简介（raw.githubusercontent 不占 API 配额），缓存 10 分钟
+const summaryCache = new Map();
+async function getSummaries(repo, branch, tree) {
+  const key = `${repo}@${branch}`;
+  const hit = summaryCache.get(key);
+  if (hit && Date.now() - hit.ts < 10 * 60 * 1000) return hit.map;
+  const skillPaths = tree.filter(n => n.type === "blob" && n.path.split("/").pop() === "SKILL.md").map(n => n.path);
+  const map = {};
+  await Promise.all(skillPaths.slice(0, 60).map(async p => {
+    try {
+      const r = await fetch(`https://raw.githubusercontent.com/${repo}/${branch}/${encodeURI(p)}`, { headers: { "User-Agent": NS }, signal: AbortSignal.timeout(15000) });
+      if (!r.ok) return;
+      const fm = parseFrontmatter(await r.text());
+      map[p.slice(0, p.lastIndexOf("/"))] = fm.description || "";
+    } catch { /* 单个失败忽略 */ }
+  }));
+  summaryCache.set(key, { map, ts: Date.now() });
+  return map;
 }
 
 // 用整棵树在本地计算目录列表；SKILL.md 所在目录标记为可安装技能。
 // 每次浏览只消耗 1 次 API 配额（树缓存命中时 0 次）。
 async function githubList(repo, ref, relPath, q) {
-  const tree = await getRepoTree(repo, ref);
+  const { tree, branch: resolvedBranch } = await getRepoTree(repo, ref);
+  const branch = ref || resolvedBranch;
   const norm = (p) => p.replace(/\/+$/, "");
   const target = norm(relPath || "");
   const skillDirs = new Set();
@@ -264,17 +285,20 @@ async function githubList(repo, ref, relPath, q) {
     if (!seen.has(rest)) seen.set(rest, { name: rest, type: "dir", path: dir, isSkill: true });
   }
   let items = [...seen.values()];
+  // 抓取各技能 SKILL.md 简介（raw 域名，不占 API 配额；带缓存）
+  const summaries = await getSummaries(repo, resolvedBranch, tree);
   // 计算目录子项数（来自整棵树，无额外 API 消耗）
   for (const item of items) {
     if (item.type !== "dir") continue;
     const p = item.path + "/";
     item.files = tree.filter(n => n.path.startsWith(p)).length;
+    item.summary = summaries[item.path] || "";
+    item.repoUrl = `https://github.com/${repo}/tree/${branch || "main"}/${item.path}`;
   }
   if (q) items = items.filter(i => i.name.toLowerCase().includes(q.toLowerCase()));
   items.sort((a, b) => (b.isSkill ? 1 : 0) - (a.isSkill ? 1 : 0) || a.name.localeCompare(b.name));
   items.forEach(i => { i.category = classify(i.name, i.summary || ""); });
-  const branch = ref || "main";
-  return { repo, branch, path: target, items };
+  return { repo, branch: resolvedBranch, path: target, items };
 }
 
 async function clawdhubSearch(api, q) {
@@ -288,6 +312,7 @@ async function clawdhubSearch(api, q) {
     downloads: x.downloads ?? (x.metrics && x.metrics.downloads) ?? 0,
     featured: !!x.featured,
     reference: (x.install && x.install.reference) || `${x.ownerHandle || ""}/${x.slug || ""}`,
+    repoUrl: `https://clawdhub.com${(x.links && x.links.canonical) || "/" + (x.ownerHandle || "") + "/skills/" + (x.slug || "")}`,
     category: classify(x.slug || x.displayName || "", x.summary || x.description || ""),
   }));
   return { items };
@@ -471,6 +496,176 @@ async function trashDelete(entry) {
   return { ok: true, entry };
 }
 
+// 导入来源（参考 dsh-any-skills）：检测本机其他工具的技能目录
+const IMPORT_SOURCES = [
+  { id: "claude", name: "Claude Code", path: ".claude/skills" },
+  { id: "codex", name: "Codex", path: ".codex/skills" },
+  { id: "opencode", name: "OpenCode", path: ".opencode/skills" },
+  { id: "agents", name: "OpenCode（项目级）.agents/skills", path: ".agents/skills" },
+];
+function expandPath(p) {
+  if (!p) return p;
+  let out = String(p);
+  if (out === "~") out = homedir();
+  else if (out.startsWith("~/")) out = join(homedir(), out.slice(2));
+  return resolvePath(out);
+}
+async function countSkillDirs(root) {
+  let entries = [];
+  try { entries = await readdir(root, { withFileTypes: true }); } catch { return { count: 0, dirs: [] }; }
+  const dirs = [];
+  for (const e of entries) {
+    if (!e.isDirectory()) continue;
+    const has = await stat(join(root, e.name, "SKILL.md")).then(s => s.isFile()).catch(() => false);
+    if (has) dirs.push(e.name);
+  }
+  return { count: dirs.length, dirs };
+}
+async function importLocal(body) {
+  let root;
+  if (body.id) {
+    const src = IMPORT_SOURCES.find(s => s.id === body.id);
+    if (!src) throw new Error("未知导入来源");
+    root = expandPath(src.path);
+  } else if (body.path) {
+    root = expandPath(String(body.path));
+  } else {
+    throw new Error("需要 id 或 path");
+  }
+  const rst = await stat(root).catch(() => null);
+  if (!rst || !rst.isDirectory()) throw new Error(`目录不存在: ${root}`);
+  const force = !!body.force;
+  const installed = [], skipped = [], failed = [];
+  const rootIsSkill = await stat(join(root, "SKILL.md")).then(s => s.isFile()).catch(() => false);
+  if (rootIsSkill) {
+    const r = await installSkillDir(root, root.split(sep).pop(), { source: `local:${root}` }, force);
+    if (r.status === 200) installed.push(r.body.name); else skipped.push({ dir: root, reason: r.body.error });
+    return { ok: true, root, installed, skipped, failed };
+  }
+  const { dirs } = await countSkillDirs(root);
+  if (!dirs.length) throw new Error("该目录下未找到含 SKILL.md 的技能");
+  for (const name of dirs) {
+    try {
+      const r = await installSkillDir(join(root, name), name, { source: `local:${root}` }, force);
+      if (r.status === 200) installed.push(r.body.name);
+      else skipped.push({ dir: name, reason: r.body.error });
+    } catch (e) { failed.push({ dir: name, error: String(e && e.message || e) }); }
+  }
+  return { ok: true, root, installed, skipped, failed };
+}
+
+// 批量安装：specs 以空格/逗号/分号分隔，支持 owner/repo 与 npm 包名
+async function installBatch(body) {
+  const specs = String(body.specs || "").split(/[\s,;，；]+/).filter(Boolean);
+  if (!specs.length) throw new Error("未提供安装目标");
+  const force = !!body.force;
+  const results = [];
+  for (const spec of specs) {
+    try {
+      let names;
+      if (/^@?[\w][\w.-]*$/.test(spec) && !spec.includes("/")) names = await installNpmPackage(spec, force);
+      else names = await installGitHubRepoAll(spec, force);
+      results.push({ spec, ok: true, names });
+    } catch (e) {
+      results.push({ spec, ok: false, error: String(e && e.message || e) });
+    }
+  }
+  return { results };
+}
+
+// 安装 npm 包内技能：registry tarball → 找 SKILL.md 目录
+async function installNpmPackage(pkg, force) {
+  const info = await fetchJson(`https://registry.npmjs.org/${encodeURIComponent(pkg).replace("%40", "@")}`);
+  const version = (info["dist-tags"] || {}).latest;
+  const tarball = version && info.versions && info.versions[version] && info.versions[version].dist && info.versions[version].dist.tarball;
+  if (!tarball) throw new Error(`npm 包 ${pkg} 缺少 tarball`);
+  const tmp = join(tmpdir(), `${NS}-npm-${Date.now()}-${Math.random().toString(36).slice(2)}`);
+  await mkdir(tmp, { recursive: true });
+  try {
+    const tgz = join(tmp, "pkg.tgz");
+    await downloadTo(tarball, tgz);
+    const list = runTar(["-tzf", tgz]).stdout.split("\n").filter(Boolean);
+    checkTarSafe(list);
+    const src = join(tmp, "src");
+    await mkdir(src, { recursive: true });
+    runTar(["-xzf", tgz, "-C", src, "--strip-components", "1"]);
+    const outNpm = await installAllFromDir(src, `npm:${pkg}@${version}`, force, normSlug(pkg));
+    return outNpm.names;
+  } finally {
+    await rm(tmp, { recursive: true, force: true }).catch(() => {});
+  }
+}
+
+// 安装 GitHub 仓库内全部技能（根目录 SKILL.md → 单技能；否则所有含 SKILL.md 的子目录）
+async function installGitHubRepoAll(spec, force) {
+  const repo = String(spec || "").replace(/^https?:\/\/github\.com\//, "").replace(/\.git$/, "").replace(/\/+$/, "");
+  if (!/^[\w.-]+\/[\w.-]+$/.test(repo)) throw new Error(`repo 不合法: ${spec}`);
+  const { tree } = await getRepoTree(repo, "HEAD");
+  const skillDirs = [...new Set(tree.filter(n => n.type === "blob" && n.path.split("/").pop() === "SKILL.md").map(n => n.path.slice(0, n.path.lastIndexOf("/"))))];
+  if (!skillDirs.length) throw new Error("仓库内未找到含 SKILL.md 的目录");
+  const tmp = join(tmpdir(), `${NS}-gh-${Date.now()}-${Math.random().toString(36).slice(2)}`);
+  await mkdir(tmp, { recursive: true });
+  try {
+    const tgz = join(tmp, "repo.tgz");
+    await downloadTo(`https://codeload.github.com/${repo}/tar.gz/HEAD`, tgz);
+    const list = runTar(["-tzf", tgz]).stdout.split("\n").filter(Boolean);
+    checkTarSafe(list);
+    const src = join(tmp, "src");
+    await mkdir(src, { recursive: true });
+    runTar(["-xzf", tgz, "-C", src, "--strip-components", "1"]);
+    const rel = skillDirs.map(d => d.includes("/") ? d.split("/").slice(1).join("/") : d);
+    const outGh = await installAllFromDir(src, `github:${repo}`, force, normSlug(repo.split("/")[1]), rel);
+    return outGh.names;
+  } finally {
+    await rm(tmp, { recursive: true, force: true }).catch(() => {});
+  }
+}
+
+// 从解压后的目录安装全部技能；skillSubDirs 为空时尝试根/一层子目录
+async function installAllFromDir(src, provenance, force, fallbackBase, skillSubDirs) {
+  let skillDirs = [];
+  if (skillSubDirs && skillSubDirs.length) {
+    skillDirs = skillSubDirs.map(d => join(src, d));
+  } else {
+    const rootHas = await stat(join(src, "SKILL.md")).then(s => s.isFile()).catch(() => false);
+    if (rootHas) skillDirs = [src];
+    else {
+      const subs = (await readdir(src, { withFileTypes: true })).filter(x => x.isDirectory());
+      for (const s of subs) {
+        const has = await stat(join(src, s.name, "SKILL.md")).then(x => x.isFile()).catch(() => false);
+        if (has) skillDirs.push(join(src, s.name));
+      }
+    }
+  }
+  if (!skillDirs.length) throw new Error("未找到含 SKILL.md 的技能目录");
+  const names = [], skipped = [];
+  for (const dir of skillDirs) {
+    const base = dir === src ? fallbackBase : dir.split(sep).pop();
+    try {
+      const r = await installSkillDir(dir, base, { source: provenance }, force);
+      if (r.status === 200) names.push(r.body.name);
+      else skipped.push({ dir: base, reason: r.body.error });
+    } catch (e) { skipped.push({ dir: base, error: String(e && e.message || e) }); }
+  }
+  return { names, skipped };
+}
+
+// 统一安装入口：把一个技能目录装进 ~/.dsh/skills
+async function installSkillDir(dir, fallbackName, provenance, force) {
+  const fm = parseFrontmatter(await readFile(join(dir, "SKILL.md"), "utf8").catch(() => ""));
+  let name = normSlug(fallbackName) || normSlug(fm.name) || normSlug(dir.split(sep).pop());
+  if (!SKILL_NAME_RE.test(name)) throw new Error(`技能名不合法: ${name}`);
+  const destDir = join(skillsDir(), name);
+  const exists = await stat(destDir).then(() => true).catch(() => false);
+  if (exists && !force) return { status: 409, body: { error: `技能目录已存在: ${name}`, needsForce: true, name } };
+  if (exists) await rm(destDir, { recursive: true, force: true });
+  await copyDir(dir, destDir);
+  const prov = await loadProvenance();
+  prov[name] = { ...provenance, installedAt: new Date().toISOString() };
+  await saveProvenance(prov);
+  return { status: 200, body: { ok: true, name, path: destDir, description: fm.description || "" } };
+}
+
 // ---------- HTTP ----------
 function sendJson(res, status, body) {
   const data = Buffer.from(JSON.stringify(body), "utf8");
@@ -565,6 +760,24 @@ export function createHandler() {
       if (route === "/trash/delete" && req.method === "POST") {
         const body = await readBody(req);
         return sendJson(res, 200, await trashDelete(String(body.entry || "")));
+      }
+      if (route === "/import/sources") {
+        const out = [];
+        for (const s of IMPORT_SOURCES) {
+          const abs = expandPath(s.path);
+          const st = await stat(abs).catch(() => null);
+          const { count } = st && st.isDirectory() ? await countSkillDirs(abs) : { count: 0 };
+          out.push({ ...s, abs, exists: !!st, count });
+        }
+        return sendJson(res, 200, { sources: out });
+      }
+      if (route === "/import" && req.method === "POST") {
+        const body = await readBody(req);
+        return sendJson(res, 200, await importLocal(body));
+      }
+      if (route === "/install-batch" && req.method === "POST") {
+        const body = await readBody(req);
+        return sendJson(res, 200, await installBatch(body));
       }
       return sendJson(res, 404, { error: `unknown route: ${route}` });
     } catch (e) {

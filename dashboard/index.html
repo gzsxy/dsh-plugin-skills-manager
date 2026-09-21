@@ -11,27 +11,27 @@
     --danger:#e74c3c; --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
   }
   *{box-sizing:border-box;margin:0;padding:0}
-  body{background:var(--bg);color:var(--ink);font:15px/1.65 -apple-system,"PingFang SC","Microsoft YaHei",sans-serif;padding-bottom:60px}
-  header{position:sticky;top:0;z-index:10;background:rgba(246,247,249,.94);backdrop-filter:blur(8px);border-bottom:1px solid var(--line);padding:16px 24px 0}
-  h1{font-size:20px;display:flex;align-items:center;gap:10px}
-  h1 .logo{width:28px;height:28px;border-radius:8px;background:linear-gradient(135deg,#3b6ef5,#7a4df8);color:#fff;display:inline-flex;align-items:center;justify-content:center;font-size:14px;font-weight:700}
-  .meta-line{color:var(--sub);font-size:12.5px;margin-top:2px}
-  .tabs{display:flex;gap:4px;margin-top:12px}
-  .tab{padding:8px 18px;border:1px solid transparent;border-bottom:none;border-radius:10px 10px 0 0;cursor:pointer;font-size:14px;color:var(--sub);user-select:none;background:transparent}
+  body{background:var(--bg);color:var(--ink);font:15px/1.6 -apple-system,"PingFang SC","Microsoft YaHei",sans-serif;padding-bottom:50px}
+  header{position:sticky;top:0;z-index:10;background:rgba(246,247,249,.94);backdrop-filter:blur(8px);border-bottom:1px solid var(--line);padding:10px 20px 0}
+  h1{font-size:17px;display:flex;align-items:center;gap:8px}
+  h1 .logo{width:24px;height:24px;border-radius:7px;background:linear-gradient(135deg,#3b6ef5,#7a4df8);color:#fff;display:inline-flex;align-items:center;justify-content:center;font-size:12px;font-weight:700}
+  .meta-line{color:var(--sub);font-size:12px;margin-top:1px}
+  .tabs{display:flex;gap:4px;margin-top:8px}
+  .tab{padding:6px 14px;border:1px solid transparent;border-bottom:none;border-radius:10px 10px 0 0;cursor:pointer;font-size:13.5px;color:var(--sub);user-select:none;background:transparent}
   .tab.on{background:var(--card);border-color:var(--line);color:var(--ink);font-weight:600}
-  .toolbar{padding:12px 0}
+  .toolbar{padding:8px 0}
   .search-wrap{position:relative;display:flex;gap:8px;align-items:center}
-  #q{flex:1;padding:9px 14px 9px 36px;border:1px solid var(--line);border-radius:10px;font-size:14px;background:var(--card);outline:none}
+  #q{flex:1;padding:7px 12px 7px 34px;border:1px solid var(--line);border-radius:9px;font-size:13.5px;background:var(--card);outline:none}
   #q:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
   .search-wrap svg{position:absolute;left:11px;top:50%;transform:translateY(-50%);width:15px;height:15px;fill:none;stroke:#9aa1b0;stroke-width:2}
-  .chips{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
-  .chip{padding:4px 12px;border-radius:999px;background:var(--chip);color:var(--sub);font-size:13px;cursor:pointer;border:1px solid transparent;user-select:none;display:inline-flex;align-items:center;gap:6px}
+  .chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+  .chip{padding:3px 10px;border-radius:999px;background:var(--chip);color:var(--sub);font-size:12.5px;cursor:pointer;border:1px solid transparent;user-select:none;display:inline-flex;align-items:center;gap:5px}
   .chip b{color:var(--ink);font-weight:600}
   .chip.on{background:var(--accent-soft);border-color:var(--accent);color:var(--accent)}
   .chip.on b{color:var(--accent)}
-  .chip .x{width:16px;height:16px;border-radius:50%;background:rgba(0,0,0,.08);font-size:11px;line-height:16px;text-align:center;color:var(--sub)}
+  .chip .x{width:15px;height:15px;border-radius:50%;background:rgba(0,0,0,.08);font-size:10px;line-height:15px;text-align:center;color:var(--sub)}
   .chip .x:hover{background:var(--danger);color:#fff}
-  main{max-width:1180px;margin:0 auto;padding:16px 24px}
+  main{max-width:1180px;margin:0 auto;padding:10px 20px}
   .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(330px,1fr));gap:14px}
   .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px;transition:.15s;display:flex;flex-direction:column;gap:8px}
   .card.clickable{cursor:pointer}
@@ -93,6 +93,7 @@
   <div class="tabs">
     <div class="tab on" data-tab="installed">📦 已安装</div>
     <div class="tab" data-tab="market">🛒 技能市场</div>
+    <div class="tab" data-tab="import">📥 导入/安装</div>
     <div class="tab" data-tab="trash">🗑 回收站</div>
   </div>
   <div class="toolbar" id="toolbar-installed">
@@ -122,6 +123,9 @@
   <div class="toolbar" id="toolbar-trash" style="display:none">
     <div class="meta-line">回收站位于 <code>~/.dsh/skills/.skills-manager/trash/</code>。「找回」恢复到已安装列表；「彻底删除」不可恢复。</div>
   </div>
+  <div class="toolbar" id="toolbar-import" style="display:none">
+    <div class="meta-line">从本机其他工具（Codex / Claude Code / OpenCode）或任意目录导入技能；也可从 GitHub / npm 批量安装（用空格、逗号、分号分隔多个目标）。</div>
+  </div>
 </header>
 
 <main>
@@ -138,6 +142,26 @@
     <div class="grid" id="tr-grid"></div>
     <div class="empty" id="tr-empty" style="display:none">回收站是空的</div>
   </div>
+  <div id="view-import" style="display:none">
+    <div class="card" style="max-width:760px;margin:0 auto 14px">
+      <div style="font-weight:600;margin-bottom:6px">📥 从本机导入</div>
+      <div class="meta-line" style="margin-bottom:10px">复制其他工具已安装的技能到 <code>~/.dsh/skills</code>（已有同名技能会跳过）。</div>
+      <div id="imp-sources">检测本机来源中…</div>
+      <div style="display:flex;gap:8px;margin-top:12px;align-items:center">
+        <input class="txt" id="imp-path" placeholder="或输入本机目录路径（含 SKILL.md 或技能子目录）" style="flex:1">
+        <button class="btn" id="imp-path-go">导入</button>
+      </div>
+    </div>
+    <div class="card" style="max-width:760px;margin:0 auto">
+      <div style="font-weight:600;margin-bottom:6px">📦 从 GitHub / npm 批量安装</div>
+      <div class="meta-line" style="margin-bottom:10px">自动识别仓库内全部技能（含 SKILL.md 的目录）。npm 包需在包内含 SKILL.md。</div>
+      <div style="display:flex;gap:8px;align-items:flex-start">
+        <textarea class="txt" id="ib-specs" rows="2" placeholder="owner/repo 或 npm 包名，多个用空格分隔（如：anthropics/skills obra/superpowers）" style="flex:1;resize:vertical"></textarea>
+        <button class="btn primary" id="ib-go">⚡ 批量安装</button>
+      </div>
+      <div id="ib-result" class="tree" style="display:none;margin-top:10px"></div>
+    </div>
+  </div>
 </main>
 
 <footer>
@@ -149,9 +173,17 @@
 
 <script>
 window.addEventListener('error', e => {
-  if (!e || !e.message) return; // 资源加载错误（无 message）不展示横幅
+  // 无 message 的事件是资源加载错误（favicon 等），忽略，不展示横幅
+  if (!e || !e.message) return;
   const b = document.getElementById('banner');
   if (b) { b.textContent = '⚠ 页面脚本错误: ' + e.message; b.className = 'banner err'; }
+  console.error('[skills-manager] error:', e.message, e.filename ? e.filename + ':' + e.lineno : '');
+});
+window.addEventListener('unhandledrejection', e => {
+  const r = e && e.reason;
+  const msg = (r && (r.message || String(r))) || '';
+  if (!msg) return; // 空原因忽略
+  console.warn('[skills-manager] 未处理的 Promise 拒绝:', msg);
 });
 const $ = s => document.querySelector(s);
 let DATA = { built: '', skills: [], total: 0, skillsDir: '' };
@@ -225,6 +257,8 @@ async function init(){
   };
   renderInstalled();
   renderSourceChips();
+  $('#imp-path-go').onclick = ()=>{ const p = $('#imp-path').value.trim(); if (p) runImport({ path: p }); };
+  $('#ib-go').onclick = runBatchInstall;
 }
 
 function switchTab(tab){
@@ -238,6 +272,7 @@ function switchTab(tab){
   $('#toolbar-trash').style.display = tab==='trash' ? '' : 'none';
   if(tab==='market' && !$('#mk-grid').dataset.loaded) loadMarket();
   if(tab==='trash') loadTrash();
+  if(tab==='import' && !$('#imp-sources').dataset.loaded) loadImportSources();
 }
 
 // ---------- 已安装 ----------
@@ -341,9 +376,9 @@ function marketFiltered(){
   return l;
 }
 function renderMarketCats(items){
-  const counts = {};
+  const counts = { '全部': items.length };
   items.forEach(i=>{ if(i.category) counts[i.category]=(counts[i.category]||0)+1; });
-  const cats = ['全部', ...Object.keys(counts).sort((a,b)=>counts[b]-counts[a])];
+  const cats = ['全部', ...Object.keys(counts).filter(c=>c!=='全部').sort((a,b)=>counts[b]-counts[a])];
   $('#mk-cats').innerHTML = cats.map(c=>`<span class="chip${c===mkCat?' on':''}" data-cat="${c}">${c} <b>${counts[c]||0}</b></span>`).join('');
   $('#mk-cats').onclick = e=>{
     const chip = e.target.closest('.chip'); if(!chip) return;
@@ -425,11 +460,13 @@ function renderGh(items){
     const installed = it.isSkill && have.has(norm);
     return `<div class="card">
       <div class="row1"><span class="badge">${it.isSkill?'技能':'目录'}</span>${it.category?`<span class="badge gray">${esc(it.category)}</span>`:''}<span class="cname">${esc(it.name)}</span></div>
-      <div class="cdesc">${it.isSkill?'含 SKILL.md，可安装':'子目录，点击进入'} · ${it.files||0} 项</div>
+      <div class="cdesc">${esc(it.summary)||'含 SKILL.md，可安装'} </div>
       <div class="foot">
+        <span>📄 ${it.files||0} 项</span>
         ${it.isSkill
           ? `<button class="btn primary small" data-install="${esc(it.path)}" data-name="${esc(it.name)}">${installed?'重新安装':'📥 安装'}</button>`
           : `<button class="btn small" data-nav="${esc(it.path)}">进入 →</button>`}
+        ${it.repoUrl?`<a class="btn small" href="${esc(it.repoUrl)}" target="_blank" rel="noopener" title="在 GitHub 打开来源仓库">↗</a>`:''}
       </div>
     </div>`;
   }).filter(Boolean);
@@ -450,6 +487,7 @@ function renderClaw(items){
       <div class="row1"><span class="badge">技能</span>${it.category&&it.category!=='工具与效率'?`<span class="badge gray">${esc(it.category)}</span>`:''}${it.featured?'<span class="badge tr">精选</span>':''}<span class="cname">${esc(it.name)}</span></div>
       <div class="cdesc">${esc(it.summary)||'<i>（无简介）</i>'}</div>
       <div class="foot"><span>⬇ ${it.downloads||0}</span><span style="font-size:11.5px">${esc(it.reference)}</span>
+        ${it.repoUrl?`<a class="btn small" href="${esc(it.repoUrl)}" target="_blank" rel="noopener" title="打开来源页面">↗</a>`:''}
         <button class="btn primary small" data-claw="${esc(it.slug)}" data-owner="${esc(it.ownerHandle||'')}">${local?'重新安装':'📥 安装'}</button></div>
     </div>`;
   }).join('') || '<div class="empty">没有搜索结果，换个关键词</div>';
@@ -475,6 +513,57 @@ async function doInstall(payload, btn){
   }
   btn.disabled = false; btn.textContent = old;
   try { DATA = await api('/index'); $('#stat').textContent = `共 ${DATA.total} 个技能`; renderInstalled(); } catch {}
+}
+
+// ---------- 导入 / 批量安装 ----------
+async function loadImportSources(){
+  const box = $('#imp-sources');
+  box.innerHTML = '检测本机来源中…';
+  try {
+    const d = await api('/import/sources');
+    box.innerHTML = d.sources.map(s=>{
+      if (!s.exists) return `<div style="display:flex;gap:8px;align-items:center;padding:6px 0;color:#9aa1b0">
+        <span style="flex:1"><b>${esc(s.name)}</b> <span style="font-size:11.5px">${esc(s.abs)}</span></span><span class="badge gray">未检测到</span></div>`;
+      return `<div style="display:flex;gap:8px;align-items:center;padding:6px 0">
+        <span style="flex:1"><b>${esc(s.name)}</b> <span style="font-size:11.5px;color:var(--sub)">${esc(s.abs)}</span></span>
+        <span class="badge ${s.count?'tr':'gray'}">${s.count} 个技能</span>
+        <button class="btn primary small" data-imp="${s.id}" ${s.count?'':'disabled'}>⚡ 导入全部</button></div>`;
+    }).join('');
+    box.dataset.loaded = '1';
+    box.onclick = async e=>{
+      const btn = e.target.closest('[data-imp]'); if(!btn) return;
+      btn.disabled = true; const old = btn.textContent; btn.textContent = '导入中…';
+      try {
+        const r = await api('/import', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ id: btn.dataset.imp }) });
+        const b = r;
+        toast(`✅ 导入完成：新增 ${b.installed.length} 个` + (b.skipped.length ? `，跳过 ${b.skipped.length} 个` : ''));
+        DATA = await api('/index'); $('#stat').textContent = `共 ${DATA.total} 个技能`; renderInstalled();
+      } catch (err) { toast('❌ ' + (err.message||err)); }
+      btn.disabled = false; btn.textContent = old;
+    };
+  } catch (e) { box.innerHTML = '加载失败：' + (e.message||e); }
+}
+async function runImport(body){
+  try {
+    const r = await api('/import', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) });
+    const b = r;
+    toast(`✅ 导入完成：新增 ${b.installed.length} 个，跳过 ${b.skipped.length} 个`);
+    DATA = await api('/index'); $('#stat').textContent = `共 ${DATA.total} 个技能`; renderInstalled();
+  } catch (e) { toast('❌ ' + (e.message||e)); }
+}
+async function runBatchInstall(){
+  const specs = $('#ib-specs').value.trim();
+  if (!specs) { toast('请输入要安装的目标'); return; }
+  const btn = $('#ib-go'); btn.disabled = true; const old = btn.textContent; btn.textContent = '安装中…';
+  const box = $('#ib-result'); box.style.display = 'block'; box.textContent = '安装中，请稍候…';
+  try {
+    const r = await api('/install-batch', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ specs }) });
+    const lines = (r.results||[]).map(x=>x.ok ? `✅ ${x.spec} → ${((x.names||[]).join(', ') || '未找到技能')}` : `❌ ${x.spec} → ${x.error}`);
+    box.textContent = lines.join('\n') || '完成';
+    toast('✅ 批量安装完成');
+    DATA = await api('/index'); $('#stat').textContent = `共 ${DATA.total} 个技能`; renderInstalled();
+  } catch (e) { box.textContent = '❌ ' + (e.message||e); }
+  btn.disabled = false; btn.textContent = '⚡ 批量安装';
 }
 
 // ---------- 回收站 ----------

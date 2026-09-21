@@ -15,6 +15,9 @@ DSH Desktop 支持在 `~/.dsh/skills` 放置大量 Agent Skills（SKILL.md 格�
   - [Superpowers 技能库](https://github.com/obra/superpowers)（社区经典技能集）
   - [ClawdHub 社区市场](https://clawdhub.com)（关键词搜索，数千社区技能）
   - 任意 GitHub 仓库（`owner/repo[/子路径]`），可**保存为常驻自定义源**
+- ⚡ **对话框技能选择器**：输入框旁 ⚡ 按钮弹出技能列表，点击即插入 `/技能名` 调用
+- 📥 **导入**：从 Claude Code / Codex / OpenCode 或任意本机目录把技能复制进 `~/.dsh/skills`
+- 📦 **批量安装**：一次粘贴多个 GitHub 仓库或 npm 包名（空格/逗号/分号分隔），自动识别包内全部技能
 - 📋 **一键调用**：复制「让 Agent 加载」提示词，粘贴到对话即可按该技能执行
 - 🗑 **一键卸载**：界面直接卸载技能，默认移入回收目录防误删
 - 🗑 **回收站**：已卸载技能可找回或彻底删除

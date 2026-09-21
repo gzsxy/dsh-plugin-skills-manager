@@ -10,12 +10,14 @@
 DSH Desktop 支持在 `~/.dsh/skills` 放置大量 Agent Skills（SKILL.md 格式），但技能一多就难以管理。本插件在 DSH 设置页提供一个完整的「技能管理台」：
 
 - 📦 **已安装**：实时浏览全部技能，按分类筛选、关键词搜索，查看完整简介（英文技能自动显示中文翻译）、版本、依赖与目录结构
-- 🛒 **技能市场**：一键浏览/搜索/安装
+- 🛒 **技能市场**：分类筛选 + 分页（每页 20/50/100/全部），一键浏览/搜索/安装
   - [Anthropic 官方技能库](https://github.com/anthropics/skills)（目录浏览）
+  - [Superpowers 技能库](https://github.com/obra/superpowers)（社区经典技能集）
   - [ClawdHub 社区市场](https://clawdhub.com)（关键词搜索，数千社区技能）
-  - 任意 GitHub 仓库（`owner/repo[/子路径]`）
+  - 任意 GitHub 仓库（`owner/repo[/子路径]`），可**保存为常驻自定义源**
 - 📋 **一键调用**：复制「让 Agent 加载」提示词，粘贴到对话即可按该技能执行
-- 🗑 **一键卸载**：界面直接卸载技能，默认移入回收目录 `~/.dsh/skills/.skills-manager/trash/` 防误删
+- 🗑 **一键卸载**：界面直接卸载技能，默认移入回收目录防误删
+- 🗑 **回收站**：已卸载技能可找回或彻底删除
 - 🌐 **中文翻译**：英文技能简介自动显示中文翻译，翻译表独立维护，改完即生效
 
 ![截图](docs/screenshot.jpg)
@@ -39,8 +41,9 @@ bash install.sh
 | 源 | 说明 |
 |---|---|
 | Anthropic 官方技能库 | [anthropics/skills](https://github.com/anthropics/skills)，Git Trees API + 10 分钟缓存，配额消耗极低；支持 `GITHUB_TOKEN` 提升限额 |
-| ClawdHub 社区市场 | [clawdhub.com](https://clawdhub.com) 的 `/api/v1/search` 与 `/api/v1/download` |
-| 任意 GitHub 仓库 | 输入 `owner/repo[/子路径]`，浏览任意含 SKILL.md 的目录 |
+| Superpowers 技能库 | [obra/superpowers](https://github.com/obra/superpowers) 的 `skills/` 目录 |
+| ClawdHub 社区市场 | [clawdhub.com](https://clawdhub.com) 的 `/api/v1/search`（limit≤100）与 `/api/v1/download` |
+| 自定义源 | 在「任意 GitHub 仓库」中浏览后点「💾 存为常驻源」，持久化于 `.skills-manager/sources.json`，可随时删除 |
 
 安装管线：下载（tar/zip）→ 路径安全校验（拒绝 `../`、绝对路径）→ SKILL.md 有效性校验 → 写入 `~/.dsh/skills/<name>` → 记录来源（`.skills-manager/provenance.json`）。同名技能会询问是否覆盖。
 
@@ -54,6 +57,12 @@ bash install.sh
 | `GET /api/skills-manager/market/list?source=&path=&q=` | 浏览 GitHub 源目录 |
 | `GET /api/skills-manager/market/search?source=clawdhub&q=` | ClawdHub 搜索 |
 | `POST /api/skills-manager/market/install` | 安装技能（参数见源码注释） |
+| `POST /api/skills-manager/uninstall` | 卸载技能 `{name}`，默认移入回收目录；`{name, permanent:true}` 彻底删除 |
+| `POST /api/skills-manager/market/sources/add` | 添加自定义源 `{name, repo, path}` |
+| `POST /api/skills-manager/market/sources/remove` | 删除自定义源 `{id}`（仅 custom- 开头可删） |
+| `GET /api/skills-manager/trash` | 回收站列表 |
+| `POST /api/skills-manager/trash/restore` | 找回 `{entry}` |
+| `POST /api/skills-manager/trash/delete` | 彻底删除 `{entry}` |
 | `POST /api/skills-manager/uninstall` | 卸载技能 `{name}`，默认移入回收目录；`{name, permanent:true}` 彻底删除 |
 
 ## 架构

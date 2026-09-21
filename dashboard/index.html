@@ -8,7 +8,7 @@
   :root{
     --bg:#f6f7f9; --card:#ffffff; --ink:#1c2330; --sub:#69707f; --line:#e6e8ee;
     --accent:#3b6ef5; --accent-soft:#eaf0ff; --chip:#eef0f4; --ok:#1a9c53; --ok-soft:#eafaf0;
-    --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+    --danger:#e74c3c; --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
   }
   *{box-sizing:border-box;margin:0;padding:0}
   body{background:var(--bg);color:var(--ink);font:15px/1.65 -apple-system,"PingFang SC","Microsoft YaHei",sans-serif;padding-bottom:60px}
@@ -25,10 +25,12 @@
   #q:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
   .search-wrap svg{position:absolute;left:11px;top:50%;transform:translateY(-50%);width:15px;height:15px;fill:none;stroke:#9aa1b0;stroke-width:2}
   .chips{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
-  .chip{padding:4px 12px;border-radius:999px;background:var(--chip);color:var(--sub);font-size:13px;cursor:pointer;border:1px solid transparent;user-select:none}
+  .chip{padding:4px 12px;border-radius:999px;background:var(--chip);color:var(--sub);font-size:13px;cursor:pointer;border:1px solid transparent;user-select:none;display:inline-flex;align-items:center;gap:6px}
   .chip b{color:var(--ink);font-weight:600}
   .chip.on{background:var(--accent-soft);border-color:var(--accent);color:var(--accent)}
   .chip.on b{color:var(--accent)}
+  .chip .x{width:16px;height:16px;border-radius:50%;background:rgba(0,0,0,.08);font-size:11px;line-height:16px;text-align:center;color:var(--sub)}
+  .chip .x:hover{background:var(--danger);color:#fff}
   main{max-width:1180px;margin:0 auto;padding:16px 24px}
   .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(330px,1fr));gap:14px}
   .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px;transition:.15s;display:flex;flex-direction:column;gap:8px}
@@ -50,12 +52,17 @@
   .btn:hover{border-color:var(--accent);color:var(--accent)}
   .btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
   .btn.primary:hover{opacity:.9;color:#fff}
-  .btn.danger{background:#e74c3c;border-color:#e74c3c;color:#fff}
+  .btn.danger{background:var(--danger);border-color:var(--danger);color:#fff}
   .btn.danger:hover{opacity:.88;color:#fff}
   .btn.small{padding:4px 11px;font-size:12.5px}
   .btn:disabled{opacity:.5;cursor:not-allowed}
   input.txt{padding:9px 14px;border:1px solid var(--line);border-radius:10px;font-size:14px;background:var(--card);outline:none}
   input.txt:focus{border-color:var(--accent)}
+  select.txt{padding:7px 10px;border:1px solid var(--line);border-radius:9px;font-size:13px;background:var(--card);outline:none;cursor:pointer}
+  .pager{display:flex;gap:8px;align-items:center;justify-content:center;margin-top:18px;flex-wrap:wrap;font-size:13px;color:var(--sub)}
+  .pager .pg{min-width:32px;padding:4px 8px;border-radius:8px;border:1px solid var(--line);background:var(--card);cursor:pointer;text-align:center}
+  .pager .pg.on{background:var(--accent);border-color:var(--accent);color:#fff}
+  .pager .pg:disabled{opacity:.4;cursor:not-allowed}
   #overlay{position:fixed;inset:0;background:rgba(20,26,40,.45);display:none;z-index:50;align-items:flex-start;justify-content:center;padding:40px 16px;overflow:auto}
   #overlay.show{display:flex}
   .panel{background:var(--card);border-radius:16px;max-width:760px;width:100%;padding:26px 28px;position:relative;box-shadow:0 20px 60px rgba(0,0,0,.25)}
@@ -86,6 +93,7 @@
   <div class="tabs">
     <div class="tab on" data-tab="installed">📦 已安装</div>
     <div class="tab" data-tab="market">🛒 技能市场</div>
+    <div class="tab" data-tab="trash">🗑 回收站</div>
   </div>
   <div class="toolbar" id="toolbar-installed">
     <div class="search-wrap">
@@ -96,22 +104,28 @@
   </div>
   <div class="toolbar" id="toolbar-market" style="display:none">
     <div class="chips" id="mk-chips"></div>
+    <div id="mk-custom" style="display:none;margin-top:10px;gap:8px;flex-wrap:wrap;align-items:center">
+      <input class="txt" id="mk-repo" placeholder="owner/repo（如 anthropics/skills）" style="flex:1;min-width:220px">
+      <input class="txt" id="mk-ref" placeholder="分支（默认 main）" style="width:140px">
+      <button class="btn" id="mk-loadrepo">浏览仓库</button>
+      <button class="btn" id="mk-save">💾 存为常驻源</button>
+    </div>
     <div class="search-wrap" style="margin-top:10px">
       <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
       <input id="mk-q" placeholder="搜索市场技能…" autocomplete="off">
       <button class="btn" id="mk-go">搜索</button>
     </div>
-    <div id="mk-custom" style="display:none;margin-top:10px;gap:8px;flex-wrap:wrap;align-items:center">
-      <input class="txt" id="mk-repo" placeholder="owner/repo（如 anthropics/skills）" style="flex:1;min-width:220px">
-      <input class="txt" id="mk-ref" placeholder="分支（默认 main）" style="width:150px">
-      <button class="btn" id="mk-loadrepo">浏览仓库</button>
-    </div>
+    <div class="chips" id="mk-cats"></div>
     <div class="crumb" id="mk-crumb" style="margin-top:10px"></div>
+    <div class="pager" id="mk-pager"></div>
+  </div>
+  <div class="toolbar" id="toolbar-trash" style="display:none">
+    <div class="meta-line">回收站位于 <code>~/.dsh/skills/.skills-manager/trash/</code>。「找回」恢复到已安装列表；「彻底删除」不可恢复。</div>
   </div>
 </header>
 
 <main>
-  <div class="banner" id="banner"></div>
+  <div class="banner err" id="banner"></div>
   <div id="view-installed">
     <div class="grid" id="grid"></div>
     <div class="empty" id="empty" style="display:none">没有匹配的技能，换个关键词试试</div>
@@ -120,10 +134,14 @@
     <div class="grid" id="mk-grid"></div>
     <div class="empty" id="mk-empty" style="display:none">没有匹配结果</div>
   </div>
+  <div id="view-trash" style="display:none">
+    <div class="grid" id="tr-grid"></div>
+    <div class="empty" id="tr-empty" style="display:none">回收站是空的</div>
+  </div>
 </main>
 
 <footer>
-  提示：「已安装」实时重扫 <code>~/.dsh/skills</code>；市场安装的技能立即出现在「已安装」中；让 Agent 加载技能：卡片 →「复制调用提示词」。
+  提示：「已安装」实时重扫 <code>~/.dsh/skills</code>；市场安装的技能立即出现在「已安装」中；卸载的技能进「回收站」可找回；让 Agent 加载技能：卡片 →「复制调用提示词」。
 </footer>
 
 <div id="overlay"><div class="panel" id="panel"></div></div>
@@ -131,17 +149,21 @@
 
 <script>
 window.addEventListener('error', e => {
-  // 无 message 的事件是资源加载错误（favicon 等），忽略，不展示横幅
-  if (!e || !e.message) return;
+  if (!e || !e.message) return; // 资源加载错误（无 message）不展示横幅
   const b = document.getElementById('banner');
   if (b) { b.textContent = '⚠ 页面脚本错误: ' + e.message; b.className = 'banner err'; }
 });
 const $ = s => document.querySelector(s);
 let DATA = { built: '', skills: [], total: 0, skillsDir: '' };
 let curTab = 'installed', curCat = '全部', curQ = '';
-let mkSource = 'anthropics', mkPath = '', mkRepo = '', mkRef = '', mkQuery = '';
-let SOURCES = [];
 const installedNames = () => new Set(DATA.skills.map(s => s.folder));
+
+// 市场状态
+let SOURCES = [];
+let mkSource = 'anthropics', mkPath = '', mkRepo = '', mkRef = '', mkQuery = '';
+let mkItems = [], mkPage = 1, mkSize = 20, mkCat = '全部';
+// 回收站
+let trashEntries = [];
 
 function esc(t){ return (t||'').replace(/&/g,'&amp;').replace(/</g,'&lt;'); }
 function disp(s){ return s.description_zh || s.description || ''; }
@@ -184,12 +206,22 @@ async function init(){
   });
   $('#overlay').onclick = e=>{ if(e.target.id==='overlay') closePanel(); };
   document.querySelectorAll('.tab').forEach(t=>t.onclick = ()=>switchTab(t.dataset.tab));
-  $('#mk-go').onclick = ()=>{ mkQuery = $('#mk-q').value.trim(); loadMarket(); };
-  $('#mk-q').onkeydown = e=>{ if(e.key==='Enter'){ mkQuery = $('#mk-q').value.trim(); loadMarket(); } };
+  $('#mk-go').onclick = ()=>{ mkQuery = $('#mk-q').value.trim(); mkPage = 1; loadMarket(); };
+  $('#mk-q').onkeydown = e=>{ if(e.key==='Enter'){ mkQuery = $('#mk-q').value.trim(); mkPage = 1; loadMarket(); } };
   $('#mk-loadrepo').onclick = ()=>{
     mkRepo = $('#mk-repo').value.trim().replace(/^https?:\/\/github\.com\//,'').replace(/\.git$/,'');
     mkRef = $('#mk-ref').value.trim() || '';
-    mkPath = ''; loadMarket();
+    mkPath = ''; mkPage = 1; loadMarket();
+  };
+  $('#mk-save').onclick = async ()=>{
+    const repo = ($('#mk-repo').value.trim() || mkRepo).replace(/^https?:\/\/github\.com\//,'').replace(/\.git$/,'');
+    if (!repo) { toast('请先填写 owner/repo'); return; }
+    try {
+      await api('/market/sources/add', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ name: repo.split('/')[1], repo, path: mkPath }) });
+      SOURCES = (await api('/market/sources')).sources || [];
+      renderSourceChips();
+      toast('✅ 已保存为常驻源');
+    } catch (e) { toast('❌ ' + (e.message||e)); }
   };
   renderInstalled();
   renderSourceChips();
@@ -200,9 +232,12 @@ function switchTab(tab){
   document.querySelectorAll('.tab').forEach(t=>t.classList.toggle('on', t.dataset.tab===tab));
   $('#view-installed').style.display = tab==='installed' ? '' : 'none';
   $('#view-market').style.display = tab==='market' ? '' : 'none';
+  $('#view-trash').style.display = tab==='trash' ? '' : 'none';
   $('#toolbar-installed').style.display = tab==='installed' ? '' : 'none';
   $('#toolbar-market').style.display = tab==='market' ? '' : 'none';
+  $('#toolbar-trash').style.display = tab==='trash' ? '' : 'none';
   if(tab==='market' && !$('#mk-grid').dataset.loaded) loadMarket();
+  if(tab==='trash') loadTrash();
 }
 
 // ---------- 已安装 ----------
@@ -255,7 +290,7 @@ function openDetail(s){
       <button class="btn" onclick="copyText('${esc(s.path)}')">复制路径</button>
       <button class="btn danger" onclick="uninstallSkill('${esc(s.folder)}')">🗑 卸载</button>
     </div>
-    <div style="margin-top:8px;font-size:12px;color:#9aa1b0">卸载会将技能移入 <code>~/.dsh/skills/.skills-manager/trash/</code>，可手动找回。</div>`;
+    <div style="margin-top:8px;font-size:12px;color:#9aa1b0">卸载会将技能移入 <code>~/.dsh/skills/.skills-manager/trash/</code>，「回收站」标签页可找回。</div>`;
   $('#overlay').classList.add('show');
 }
 function closePanel(){ $('#overlay').classList.remove('show'); }
@@ -266,20 +301,86 @@ function copyText(text){
       ta.select(); document.execCommand('copy'); ta.remove(); toast('已复制 ✓');
     });
 }
+async function uninstallSkill(folder){
+  if (!confirm(`确定卸载技能「${folder}」？\n\n将从 ~/.dsh/skills 移除（移入回收目录，可在「回收站」标签页找回）。`)) return;
+  try {
+    const r = await api('/uninstall', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ name: folder }) });
+    toast(`✅ 已卸载「${r.name}」`);
+  } catch (e) { toast('❌ 卸载失败：' + (e.message||e)); }
+  closePanel();
+  try { DATA = await api('/index'); $('#stat').textContent = `共 ${DATA.total} 个技能`; renderInstalled(); } catch {}
+}
 
 // ---------- 技能市场 ----------
 function renderSourceChips(){
   $('#mk-chips').innerHTML = SOURCES.map(s=>
-    `<span class="chip${s.id===mkSource?' on':''}" data-src="${s.id}" title="${esc(s.desc)}">${s.name}</span>`).join('');
+    `<span class="chip${s.id===mkSource?' on':''}" data-src="${s.id}" title="${esc(s.desc)}">${s.name}${s.builtin?'':` <span class="x" data-del="${s.id}" title="删除此源">✕</span>`}</span>`).join('');
   $('#mk-chips').onclick = e=>{
+    const del = e.target.closest('[data-del]');
+    if (del){
+      e.stopPropagation();
+      if (!confirm('删除这个自定义源？（不影响已安装技能）')) return;
+      api('/market/sources/remove', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ id: del.dataset.del }) })
+        .then(async ()=>{ SOURCES = (await api('/market/sources')).sources || []; if (mkSource===del.dataset.del){ mkSource='anthropics'; } renderSourceChips(); toast('已删除源'); })
+        .catch(err=>toast('❌ '+(err.message||err)));
+      return;
+    }
     const chip = e.target.closest('.chip'); if(!chip) return;
-    mkSource = chip.dataset.src; mkPath=''; mkQuery=''; mkRepo=''; mkRef='';
+    mkSource = chip.dataset.src; mkPath=''; mkQuery=''; mkRepo=''; mkRef=''; mkCat='全部'; mkPage=1;
     $('#mk-q').value='';
     renderSourceChips(); loadMarket();
   };
   $('#mk-custom').style.display = mkSource==='github' ? 'flex' : 'none';
   const isClaw = mkSource==='clawdhub';
   $('#mk-q').placeholder = isClaw ? '搜索 ClawdHub 社区技能（如 pdf、ppt、web）…' : '过滤当前目录列表…';
+}
+function marketFiltered(){
+  let l = mkItems;
+  if (mkCat!=='全部') l = l.filter(i=>i.category===mkCat);
+  if (mkQuery) l = l.filter(i=>(JSON.stringify(i)).toLowerCase().includes(mkQuery.toLowerCase()));
+  return l;
+}
+function renderMarketCats(items){
+  const counts = {};
+  items.forEach(i=>{ if(i.category) counts[i.category]=(counts[i.category]||0)+1; });
+  const cats = ['全部', ...Object.keys(counts).sort((a,b)=>counts[b]-counts[a])];
+  $('#mk-cats').innerHTML = cats.map(c=>`<span class="chip${c===mkCat?' on':''}" data-cat="${c}">${c} <b>${counts[c]||0}</b></span>`).join('');
+  $('#mk-cats').onclick = e=>{
+    const chip = e.target.closest('.chip'); if(!chip) return;
+    mkCat = chip.dataset.cat; mkPage = 1;
+    renderMarketCats(mkItems); renderMarketPage();
+  };
+}
+function renderPager(total){
+  const pages = mkSize==='all' ? 1 : Math.max(1, Math.ceil(total/mkSize));
+  if (mkPage > pages) mkPage = pages;
+  let html = `<span>每页</span>
+    <select class="txt" id="mk-size">
+      ${[20,50,100].map(n=>`<option value="${n}"${mkSize===n?' selected':''}>${n}</option>`).join('')}
+      <option value="all"${mkSize==='all'?' selected':''}>全部</option>
+    </select>
+    <button class="pg" id="pg-prev" ${mkPage<=1?'disabled':''}>‹</button>`;
+  if (mkSize==='all') html += `<span class="pg on">全部 ${total} 条</span>`;
+  else {
+    const from = Math.max(1, mkPage-2), to = Math.min(pages, from+4);
+    for (let p=from; p<=to; p++) html += `<span class="pg${p===mkPage?' on':''}" data-p="${p}">${p}</span>`;
+    html += `<button class="pg" id="pg-next" ${mkPage>=pages?'disabled':''}>›</button><span>共 ${total} 条</span>`;
+  }
+  $('#mk-pager').innerHTML = html;
+  $('#mk-size').onchange = e=>{ mkSize = e.target.value==='all' ? 'all' : +e.target.value; mkPage = 1; renderMarketPage(); };
+  const prev = document.getElementById('pg-prev');
+  const next = document.getElementById('pg-next');
+  if (prev) prev.onclick = ()=>{ if(mkPage>1){ mkPage--; renderMarketPage(); } };
+  if (next) next.onclick = ()=>{ if(mkPage<pages){ mkPage++; renderMarketPage(); } };
+  document.querySelectorAll('#mk-pager .pg[data-p]').forEach(el=>el.onclick=()=>{ mkPage = +el.dataset.p; renderMarketPage(); });
+}
+function renderMarketPage(){
+  const list = marketFiltered();
+  renderPager(list.length);
+  const start = mkSize==='all' ? 0 : (mkPage-1)*mkSize;
+  const slice = mkSize==='all' ? list : list.slice(start, start+mkSize);
+  if (mkSource==='clawdhub') renderClaw(slice);
+  else renderGh(slice);
 }
 function mkCrumb(repo, branch, path){
   if(mkSource==='clawdhub'){ $('#mk-crumb').textContent = 'ClawdHub：输入关键词搜索后安装'; return; }
@@ -288,7 +389,7 @@ function mkCrumb(repo, branch, path){
   let acc = '';
   for (const p of parts){ acc += (acc?'/':'')+p; html += ` / <a data-p="${esc(acc)}">${esc(p)}</a>`; }
   $('#mk-crumb').innerHTML = html;
-  $('#mk-crumb').querySelectorAll('a').forEach(a=>a.onclick=()=>{ mkPath=a.dataset.p; loadMarket(); });
+  $('#mk-crumb').querySelectorAll('a').forEach(a=>a.onclick=()=>{ mkPath=a.dataset.p; mkPage=1; loadMarket(); });
 }
 async function loadMarket(){
   const grid = $('#mk-grid');
@@ -296,8 +397,8 @@ async function loadMarket(){
   try {
     if (mkSource==='clawdhub'){
       const d = await api(`/market/search?source=clawdhub&q=${encodeURIComponent(mkQuery||'skill')}`);
-      mkCrumb(); renderClaw(d.items||[]);
-      grid.dataset.loaded = '1';
+      mkItems = d.items || [];
+      mkCrumb();
     } else {
       const params = new URLSearchParams({source: mkSource});
       if (mkSource==='github'){ if(mkRepo) params.set('repo', mkRepo); if(mkRef) params.set('ref', mkRef); }
@@ -305,9 +406,11 @@ async function loadMarket(){
       if (mkQuery) params.set('q', mkQuery);
       const d = await api('/market/list?'+params.toString());
       mkCrumb(d.repo, d.branch, d.path);
-      renderGh(d.items||[]);
-      grid.dataset.loaded = '1';
+      mkItems = d.items || [];
     }
+    renderMarketCats(mkItems);
+    renderMarketPage();
+    $('#mk-grid').dataset.loaded = '1';
   } catch (e) {
     grid.innerHTML = '';
     $('#mk-empty').style.display='block';
@@ -321,7 +424,7 @@ function renderGh(items){
     const norm = it.name.toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,'');
     const installed = it.isSkill && have.has(norm);
     return `<div class="card">
-      <div class="row1"><span class="badge">${it.isSkill?'技能':'目录'}</span><span class="cname">${esc(it.name)}</span></div>
+      <div class="row1"><span class="badge">${it.isSkill?'技能':'目录'}</span>${it.category?`<span class="badge gray">${esc(it.category)}</span>`:''}<span class="cname">${esc(it.name)}</span></div>
       <div class="cdesc">${it.isSkill?'含 SKILL.md，可安装':'子目录，点击进入'} · ${it.files||0} 项</div>
       <div class="foot">
         ${it.isSkill
@@ -334,9 +437,9 @@ function renderGh(items){
   $('#mk-empty').style.display = 'none';
   $('#mk-grid').onclick = e=>{
     const nav = e.target.closest('[data-nav]');
-    if (nav){ mkPath = nav.dataset.nav; loadMarket(); return; }
+    if (nav){ mkPath = nav.dataset.nav; mkPage = 1; loadMarket(); return; }
     const btn = e.target.closest('[data-install]');
-    if (btn) doInstall({ kind:'github', repo: (mkSource==='anthropics'?'anthropics/skills':mkRepo), ref: mkRef||undefined, subPath: btn.dataset.install, name: btn.dataset.name }, btn);
+    if (btn) doInstall({ kind:'github', repo: (mkSource==='anthropics'?'anthropics/skills':mkSource==='superpowers'?'obra/superpowers':mkRepo), ref: mkRef||undefined, subPath: btn.dataset.install, name: btn.dataset.name }, btn);
   };
 }
 function renderClaw(items){
@@ -344,9 +447,9 @@ function renderClaw(items){
   $('#mk-grid').innerHTML = items.map(it=>{
     const local = it.slug && have.has(String(it.slug).toLowerCase());
     return `<div class="card">
-      <div class="row1"><span class="badge">技能</span>${it.featured?'<span class="badge tr">精选</span>':''}<span class="cname">${esc(it.name)}</span></div>
+      <div class="row1"><span class="badge">技能</span>${it.category&&it.category!=='工具与效率'?`<span class="badge gray">${esc(it.category)}</span>`:''}${it.featured?'<span class="badge tr">精选</span>':''}<span class="cname">${esc(it.name)}</span></div>
       <div class="cdesc">${esc(it.summary)||'<i>（无简介）</i>'}</div>
-      <div class="foot"><span>⬇ ${it.downloads||0} 次安装</span><span style="font-size:11.5px">${esc(it.reference)}</span>
+      <div class="foot"><span>⬇ ${it.downloads||0}</span><span style="font-size:11.5px">${esc(it.reference)}</span>
         <button class="btn primary small" data-claw="${esc(it.slug)}" data-owner="${esc(it.ownerHandle||'')}">${local?'重新安装':'📥 安装'}</button></div>
     </div>`;
   }).join('') || '<div class="empty">没有搜索结果，换个关键词</div>';
@@ -374,14 +477,46 @@ async function doInstall(payload, btn){
   try { DATA = await api('/index'); $('#stat').textContent = `共 ${DATA.total} 个技能`; renderInstalled(); } catch {}
 }
 
-async function uninstallSkill(folder){
-  if (!confirm(`确定卸载技能「${folder}」？\n\n将从 ~/.dsh/skills 移除（移入回收目录 .skills-manager/trash/，可手动找回）。`)) return;
+// ---------- 回收站 ----------
+async function loadTrash(){
+  const grid = $('#tr-grid');
+  grid.innerHTML = '<div class="empty">加载中…</div>'; $('#tr-empty').style.display='none';
   try {
-    const r = await api('/uninstall', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ name: folder }) });
-    toast(`✅ 已卸载「${r.name}」`);
-  } catch (e) { toast('❌ 卸载失败：' + (e.message||e)); }
-  closePanel();
-  try { DATA = await api('/index'); $('#stat').textContent = `共 ${DATA.total} 个技能`; renderInstalled(); } catch {}
+    const d = await api('/trash');
+    trashEntries = d.entries || [];
+    if (!trashEntries.length){ grid.innerHTML=''; $('#tr-empty').style.display='block'; $('#tr-empty').textContent='回收站是空的'; return; }
+    grid.innerHTML = trashEntries.map(t=>`
+      <div class="card">
+        <div class="row1"><span class="badge gray">已卸载</span><span class="cname">${esc(t.name)}</span></div>
+        <div class="cdesc">${esc(t.description)||'<i>（无简介）</i>'}</div>
+        <div class="foot"><span>🕒 ${esc(t.time)}</span><span class="cname" style="font-weight:400;font-size:11px">${esc(t.entry)}</span></div>
+        <div class="btns" style="margin-top:8px">
+          <button class="btn primary small" data-restore="${esc(t.entry)}">↩ 找回</button>
+          <button class="btn danger small" data-purge="${esc(t.entry)}">🔥 彻底删除</button>
+        </div>
+      </div>`).join('');
+    $('#tr-grid').onclick = async e=>{
+      const rs = e.target.closest('[data-restore]');
+      if (rs){
+        try {
+          await api('/trash/restore', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ entry: rs.dataset.restore }) });
+          toast('✅ 已找回'); DATA = await api('/index'); $('#stat').textContent = `共 ${DATA.total} 个技能`; renderInstalled(); loadTrash();
+        } catch (err) { toast('❌ ' + (err.message||err)); }
+        return;
+      }
+      const pg = e.target.closest('[data-purge]');
+      if (pg){
+        if (!confirm('彻底删除该技能？此操作不可恢复！')) return;
+        try {
+          await api('/trash/delete', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ entry: pg.dataset.purge }) });
+          toast('已彻底删除'); loadTrash();
+        } catch (err) { toast('❌ ' + (err.message||err)); }
+      }
+    };
+  } catch (e) {
+    grid.innerHTML = ''; $('#tr-empty').style.display='block';
+    $('#tr-empty').textContent = '加载失败：' + (e.message||e);
+  }
 }
 
 init();

@@ -19,6 +19,7 @@ export const inject = ["webServer"];
 const PLUGIN_DIR = dirname(fileURLToPath(import.meta.url));
 const NS = "dsh-plugin-skills-manager";
 const SKILL_NAME_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
+function normSlug(s) { return String(s || "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, ""); }
 
 function dshHome() {
   const env = process.env.DSH_HOME;
@@ -187,11 +188,25 @@ export async function scanSkills() {
 
 // ---------- 技能市场 ----------
 const GH_API = "https://api.github.com";
-const MARKET_SOURCES = [
-  { id: "anthropics", name: "Anthropic 官方技能库", type: "github", repo: "anthropics/skills", rootPath: "skills", desc: "Anthropic 官方维护的高质量技能（文档处理/设计/开发等）" },
-  { id: "clawdhub", name: "ClawdHub 社区市场", type: "clawdhub", api: "https://clawdhub.com", desc: "OpenClaw 生态社区技能市场，数千个技能可搜索安装" },
-  { id: "github", name: "任意 GitHub 仓库", type: "github-custom", desc: "输入 owner/repo[/子路径]，安装任何含 SKILL.md 的仓库目录" },
+// 内置源；用户自定义源持久化于 ~/.dsh/skills/.skills-manager/sources.json
+const BUILTIN_SOURCES = [
+  { id: "anthropics", name: "Anthropic 官方技能库", type: "github", repo: "anthropics/skills", rootPath: "skills", builtin: true, desc: "Anthropic 官方维护的高质量技能（文档处理/设计/开发等）" },
+  { id: "superpowers", name: "Superpowers 技能库", type: "github", repo: "obra/superpowers", rootPath: "skills", builtin: true, desc: "obra/superpowers 社区经典技能集" },
+  { id: "clawdhub", name: "ClawdHub 社区市场", type: "clawdhub", api: "https://clawdhub.com", builtin: true, desc: "OpenClaw 生态社区技能市场，数千个技能可搜索安装" },
+  { id: "github", name: "任意 GitHub 仓库", type: "github-custom", builtin: true, desc: "输入 owner/repo[/子路径]，安装任何含 SKILL.md 的仓库目录" },
 ];
+async function loadCustomSources() {
+  try { return JSON.parse(await readFile(join(skillsDir(), ".skills-manager", "sources.json"), "utf8")); } catch { return []; }
+}
+async function saveCustomSources(list) {
+  await mkdir(join(skillsDir(), ".skills-manager"), { recursive: true });
+  await writeFile(join(skillsDir(), ".skills-manager", "sources.json"), JSON.stringify(list, null, 1), "utf8");
+}
+async function getSources() {
+  return [...BUILTIN_SOURCES, ...(await loadCustomSources()).map(s => ({ ...s, builtin: false }))];
+}
+function trashDir() { return join(skillsDir(), ".skills-manager", "trash"); }
+const TRASH_ENTRY_RE = /^[a-z0-9][a-z0-9-]*@\d{13,}$/;
 
 function ghHeaders() {
   const h = { "User-Agent": "dsh-plugin-skills-manager", "Accept": "application/vnd.github+json" };
@@ -200,7 +215,7 @@ function ghHeaders() {
 }
 
 async function fetchJson(url) {
-  const r = await fetch(url, { headers: ghHeaders() });
+  const r = await fetch(url, { headers: ghHeaders(), signal: AbortSignal.timeout(20000) });
   if (!r.ok) throw new Error(`HTTP ${r.status} ${url}`);
   return r.json();
 }
@@ -257,12 +272,14 @@ async function githubList(repo, ref, relPath, q) {
   }
   if (q) items = items.filter(i => i.name.toLowerCase().includes(q.toLowerCase()));
   items.sort((a, b) => (b.isSkill ? 1 : 0) - (a.isSkill ? 1 : 0) || a.name.localeCompare(b.name));
+  items.forEach(i => { i.category = classify(i.name, i.summary || ""); });
   const branch = ref || "main";
   return { repo, branch, path: target, items };
 }
 
 async function clawdhubSearch(api, q) {
-  const data = await fetchJson(`${api}/api/v1/search?q=${encodeURIComponent(q)}&limit=30`);
+  const limit = Math.min(Math.max(parseInt(q.limit) || 100, 1), 100);
+  const data = await fetchJson(`${api}/api/v1/search?q=${encodeURIComponent(q.q || "skill")}&limit=${limit}`);
   const items = (data.results || data.items || []).map(x => ({
     slug: x.slug || ((x.install && x.install.reference) || "").split("/").pop(),
     ownerHandle: x.ownerHandle || ((x.install && x.install.reference) || "").split("/")[0],
@@ -271,6 +288,7 @@ async function clawdhubSearch(api, q) {
     downloads: x.downloads ?? (x.metrics && x.metrics.downloads) ?? 0,
     featured: !!x.featured,
     reference: (x.install && x.install.reference) || `${x.ownerHandle || ""}/${x.slug || ""}`,
+    category: classify(x.slug || x.displayName || "", x.summary || x.description || ""),
   }));
   return { items };
 }
@@ -345,7 +363,7 @@ async function marketInstall(body) {
     } else if (body.kind === "clawdhub") {
       const slug = String(body.slug || "");
       if (!/^[\w.-]+$/.test(slug)) throw new Error("slug 不合法");
-      const api = MARKET_SOURCES.find(s => s.id === "clawdhub").api;
+      const api = ((await getSources()).find(s => s.id === "clawdhub")).api;
       let url = `${api}/api/v1/download?slug=${encodeURIComponent(slug)}`;
       if (body.ownerHandle) url += `&ownerHandle=${encodeURIComponent(body.ownerHandle)}`;
       const zip = join(tmp, "skill.zip");
@@ -414,6 +432,45 @@ async function marketUninstall(body) {
   return { status: 200, body: { ok: true, name, permanent: !!body.permanent } };
 }
 
+// 回收站：列出 / 找回 / 彻底删除
+async function listTrash() {
+  let entries = [];
+  try { entries = await readdir(trashDir(), { withFileTypes: true }); } catch { return []; }
+  const out = [];
+  for (const e of entries) {
+    if (!e.isDirectory()) continue;
+    const entry = e.name;
+    const name = entry.split("@")[0];
+    let description = "";
+    try {
+      const fm = parseFrontmatter(await readFile(join(trashDir(), entry, "SKILL.md"), "utf8"));
+      description = fm.description || "";
+    } catch { /* trash 项可能损坏，仅展示名称 */ }
+    const ts = Number((entry.split("@")[1]) || 0);
+    out.push({ entry, name, time: ts ? new Date(ts).toISOString().slice(0, 16).replace("T", " ") : "", description });
+  }
+  out.sort((a, b) => b.entry.localeCompare(a.entry));
+  return out;
+}
+async function trashRestore(entry) {
+  if (!TRASH_ENTRY_RE.test(entry)) throw new Error("回收站条目名不合法");
+  const name = entry.split("@")[0];
+  const src = join(trashDir(), entry);
+  const dest = join(skillsDir(), name);
+  const exists = await stat(dest).then(() => true).catch(() => false);
+  if (exists) throw new Error(`已存在同名技能「${name}」，无法找回（可先卸载或手动改名）`);
+  await rename(src, dest).catch(async (e) => {
+    if (String(e).includes("EXDEV")) { await copyDir(src, dest); await rm(src, { recursive: true, force: true }); }
+    else throw e;
+  });
+  return { ok: true, name };
+}
+async function trashDelete(entry) {
+  if (!TRASH_ENTRY_RE.test(entry)) throw new Error("回收站条目名不合法");
+  await rm(join(trashDir(), entry), { recursive: true, force: true });
+  return { ok: true, entry };
+}
+
 // ---------- HTTP ----------
 function sendJson(res, status, body) {
   const data = Buffer.from(JSON.stringify(body), "utf8");
@@ -451,20 +508,44 @@ export function createHandler() {
       if (route === "/" || route === "/dashboard" || route === "/index.html") {
         return sendFile(res, join(PLUGIN_DIR, "dashboard", "index.html"), "text/html");
       }
-      if (route === "/market/sources") return sendJson(res, 200, { sources: MARKET_SOURCES });
+      if (route === "/market/sources") return sendJson(res, 200, { sources: await getSources() });
+      if (route === "/market/sources/add" && req.method === "POST") {
+        const body = await readBody(req);
+        const repo = String(body.repo || "").replace(/^https?:\/\/github\.com\//, "").replace(/\.git$/, "").replace(/\/+$/, "");
+        if (!/^[\w.-]+\/[\w.-]+$/.test(repo)) throw new Error("repo 格式应为 owner/repo");
+        const name = String(body.name || repo.split("/")[1]).trim().slice(0, 30) || "自定义源";
+        const rootPath = String(body.path || "").replace(/^\/+|\/+$/g, "");
+        const list = await loadCustomSources();
+        const id = "custom-" + normSlug(name + "-" + repo).slice(0, 24) + "-" + Math.random().toString(36).slice(2, 6);
+        const source = { id, name, type: "github", repo, rootPath, desc: `自定义源：${repo}${rootPath ? "/" + rootPath : ""}` };
+        list.push(source);
+        await saveCustomSources(list);
+        return sendJson(res, 200, { ok: true, source });
+      }
+      if (route === "/market/sources/remove" && req.method === "POST") {
+        const body = await readBody(req);
+        const id = String(body.id || "");
+        if (!id.startsWith("custom-")) throw new Error("内置源不可删除");
+        await saveCustomSources((await loadCustomSources()).filter(s => s.id !== id));
+        return sendJson(res, 200, { ok: true });
+      }
       if (route === "/market/list") {
-        const source = MARKET_SOURCES.find(s => s.id === q.source);
+        const source = (await getSources()).find(s => s.id === q.source);
         if (!source) return sendJson(res, 400, { error: "未知市场源" });
-        if (source.type !== "github") return sendJson(res, 400, { error: "该源不支持目录浏览，请用搜索" });
+        if (source.type !== "github" && source.type !== "github-custom") {
+          return sendJson(res, 400, { error: "该源不支持目录浏览，请用搜索" });
+        }
         const repo = q.repo || source.repo;
-        const path = q.path !== undefined ? q.path : (source.rootPath || "");
+        if (!repo) return sendJson(res, 400, { error: "该源需要提供 owner/repo" });
+        // 修复：未显式给 path 时使用源预设 rootPath（此前空字符串会覆盖预设，导致读到仓库根目录）
+        const path = (q.path !== undefined && q.path !== "") ? q.path : (source.rootPath || "");
         return sendJson(res, 200, await githubList(repo, q.ref, path, q.q || ""));
       }
       if (route === "/market/search") {
-        const source = MARKET_SOURCES.find(s => s.id === q.source);
+        const source = (await getSources()).find(s => s.id === q.source);
         if (!source) return sendJson(res, 400, { error: "未知市场源" });
         if (source.type !== "clawdhub") return sendJson(res, 400, { error: "该源不支持搜索，请用浏览" });
-        return sendJson(res, 200, await clawdhubSearch(source.api, q.q || ""));
+        return sendJson(res, 200, await clawdhubSearch(source.api, q));
       }
       if (route === "/market/install" && req.method === "POST") {
         const body = await readBody(req);
@@ -475,6 +556,15 @@ export function createHandler() {
         const body = await readBody(req);
         const r = await marketUninstall(body);
         return sendJson(res, r.status, r.body);
+      }
+      if (route === "/trash") return sendJson(res, 200, { entries: await listTrash() });
+      if (route === "/trash/restore" && req.method === "POST") {
+        const body = await readBody(req);
+        return sendJson(res, 200, await trashRestore(String(body.entry || "")));
+      }
+      if (route === "/trash/delete" && req.method === "POST") {
+        const body = await readBody(req);
+        return sendJson(res, 200, await trashDelete(String(body.entry || "")));
       }
       return sendJson(res, 404, { error: `unknown route: ${route}` });
     } catch (e) {

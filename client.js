@@ -58,9 +58,24 @@ function __smRegister() {
               .catch(() => setSkills([]));
           };
 
+          function findComposerTextarea(fromEl) {
+            let el = fromEl;
+            while (el && el !== document.documentElement) {
+              try {
+                const card = el.querySelector('[data-composer-card]');
+                if (card) { const ta = card.querySelector('textarea'); if (ta) return ta; }
+              } catch (e) { /* ignore */ }
+              el = el.parentElement;
+            }
+            const tas = [...document.querySelectorAll('textarea')].filter(t => !t.disabled && t.offsetParent !== null);
+            return tas.length ? tas[tas.length - 1] : null;
+          }
           function insert(name) {
             const text = '/' + name + ' ';
-            const ta = document.querySelector('textarea');
+            const ta = findComposerTextarea(btnRef.current)
+              || (document.querySelector('[data-composer-card]') && document.querySelector('[data-composer-card]').querySelector('textarea'))
+              || document.querySelector('main textarea')
+              || document.querySelector('textarea');
             if (ta) {
               try {
                 const setter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value').set;

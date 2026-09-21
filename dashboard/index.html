@@ -647,8 +647,10 @@ function renderGh(items){
 }
 function renderClaw(items){
   const have = installedNames();
+  // 已安装判定：优先用来源记录（clawdhub:owner/slug）精确匹配；slug 对比仅兜底
+  const boundRefs = new Set(DATA.skills.filter(s=>s.origin && s.origin.source && s.origin.source.startsWith('clawdhub:')).map(s=>s.origin.source.slice(9)));
   $('#mk-grid').innerHTML = items.map(it=>{
-    const local = it.slug && have.has(String(it.slug).toLowerCase());
+    const local = (it.reference && boundRefs.has(it.reference)) || (it.slug && have.has(String(it.slug).toLowerCase()));
     return `<div class="card">
       <div class="row1"><span class="badge">技能</span>${it.category&&it.category!=='工具与效率'?`<span class="badge gray">${esc(it.category)}</span>`:''}${it.featured?'<span class="badge tr">精选</span>':''}<span class="cname">${esc(it.name)}</span></div>
       <div class="cdesc">${esc(it.summary)||'<i>（无简介）</i>'}</div>

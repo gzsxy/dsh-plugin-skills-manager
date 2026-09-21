@@ -20,6 +20,10 @@ export const inject = ["webServer"];
 const PLUGIN_DIR = dirname(fileURLToPath(import.meta.url));
 const NS = "dsh-plugin-skills-manager";
 const SKILL_NAME_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
+function localDateStr(d) {
+  const pad = n => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
 function normSlug(s) { return String(s || "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, ""); }
 
 function dshHome() {
@@ -153,6 +157,7 @@ export async function scanSkills() {
   const sd = skillsDir();
   const zh = await loadTranslations();
   const prov = await loadProvenance();
+  const autoTl = await loadAutoTl();
   const skills = [];
   let folders = [];
   try { folders = (await readdir(sd, { withFileTypes: true })).filter(d => d.isDirectory()).map(d => d.name).sort(); } catch { /* 目录不存在 */ }
@@ -164,12 +169,12 @@ export async function scanSkills() {
     const description = fm.description || firstParagraph(text.split("---").slice(2).join("---"));
     const stats = await dirStats(join(sd, folder));
     let mtime = "";
-    try { mtime = new Date((await stat(skillMd)).mtime).toISOString().slice(0, 10); } catch { /* ignore */ }
+    try { mtime = localDateStr((await stat(skillMd)).mtime); } catch { /* ignore */ }
     skills.push({
       name: fm.name || folder,
       folder,
       description,
-      description_zh: zh[folder] || "",
+      description_zh: zh[folder] || autoTl[description] || "",
       category: classify(folder, description || ""),
       version: fm.metadata.version || "",
       author: fm.metadata.author || "",
@@ -184,7 +189,7 @@ export async function scanSkills() {
       origin: prov[folder] || null,
     });
   }
-  return { built: new Date().toISOString().slice(0, 16).replace("T", " "), skillsDir: sd, total: skills.length, skills };
+  return { built: localDateStr(new Date()), skillsDir: sd, total: skills.length, skills };
 }
 
 // ---------- 技能市场 ----------
@@ -473,7 +478,7 @@ async function listTrash() {
       description = fm.description || "";
     } catch { /* trash 项可能损坏，仅展示名称 */ }
     const ts = Number((entry.split("@")[1]) || 0);
-    out.push({ entry, name, time: ts ? new Date(ts).toISOString().slice(0, 16).replace("T", " ") : "", description });
+    out.push({ entry, name, time: ts ? localDateStr(new Date(ts)) : "", description });
   }
   out.sort((a, b) => b.entry.localeCompare(a.entry));
   return out;
@@ -667,6 +672,56 @@ async function installSkillDir(dir, fallbackName, provenance, force) {
   return { status: 200, body: { ok: true, name, path: destDir, description: fm.description || "" } };
 }
 
+// ---------- 自动翻译（英文简介 → 中文） ----------
+function autoTlFile() { return join(skillsDir(), ".skills-manager", "auto-translations.json"); }
+async function loadAutoTl() {
+  try { return JSON.parse(await readFile(autoTlFile(), "utf8")); } catch { return {}; }
+}
+async function saveAutoTl(m) {
+  await mkdir(dirname(autoTlFile()), { recursive: true });
+  await writeFile(autoTlFile(), JSON.stringify(m, null, 1), "utf8");
+}
+function isMostlyEnglish(s) {
+  if (!s || s.length < 8) return false;
+  const arr = [...s];
+  return arr.filter(c => c.charCodeAt(0) < 128).length / arr.length > 0.7;
+}
+async function translateOne(text) {
+  const q = encodeURIComponent(text.slice(0, 1200));
+  const attempts = [
+    [`https://translate.googleapis.com/translate_a/single?client=gtx&sl=en&tl=zh-CN&dt=t&q=${q}`, d => (d[0] || []).map(x => x && x[0] || "").join("")],
+    [`https://clients5.google.com/translate_a/single?client=gtx&sl=en&tl=zh-CN&dt=t&q=${q}`, d => (d[0] || []).map(x => x && x[0] || "").join("")],
+    [`https://api.mymemory.translated.net/get?q=${q}&langpair=en|zh-CN`, d => (d.responseData && d.responseData.translatedText) || ""],
+  ];
+  for (const [url, pick] of attempts) {
+    try {
+      const r = await fetch(url, { headers: { "User-Agent": "Mozilla/5.0" }, signal: AbortSignal.timeout(15000) });
+      if (!r.ok) continue;
+      const d = await r.json();
+      const out = pick(d);
+      if (out) return out.trim();
+    } catch { /* 下一个源 */ }
+  }
+  return "";
+}
+let __translating = false;
+async function translatePending(skills) {
+  if (__translating) return;
+  __translating = true;
+  try {
+    const cache = await loadAutoTl();
+    let changed = false;
+    const pending = skills.filter(s => isMostlyEnglish(s.description) && !cache[s.description]);
+    for (const s of pending.slice(0, 30)) {
+      const zh = await translateOne(s.description);
+      if (zh) { cache[s.description] = zh; changed = true; }
+      await new Promise(r => setTimeout(r, 250));
+    }
+    if (changed) { await saveAutoTl(cache); }
+  } catch { /* 静默 */ }
+  finally { __translating = false; }
+}
+
 // ---------- 更新检查 ----------
 function sha256Hex(s) { return createHash("sha256").update(s).digest("hex"); }
 function gitBlobSha(buf) { return createHash("sha1").update(`blob ${buf.length}\0`).update(buf).digest("hex"); }
@@ -821,7 +876,12 @@ export function createHandler() {
     const q = Object.fromEntries(new URL(req.url || "/", "http://local").searchParams);
 
     try {
-      if (route === "/index") return sendJson(res, 200, await scanSkills());
+      if (route === "/index") {
+        const idx = await scanSkills();
+        // 后台补齐英文简介翻译，不阻塞响应
+        translatePending(idx.skills).catch(() => {});
+        return sendJson(res, 200, idx);
+      }
       if (route === "/" || route === "/dashboard" || route === "/index.html") {
         return sendFile(res, join(PLUGIN_DIR, "dashboard", "index.html"), "text/html");
       }
@@ -936,6 +996,9 @@ export async function apply(ctx) {
   // 定时检查技能更新：45 秒后首查，此后每 6 小时
   const timer = setInterval(() => { checkUpdates().catch(() => {}); }, 6 * 60 * 60 * 1000);
   timer.unref?.();
-  const first = setTimeout(() => { checkUpdates().then(r => ctx.logger?.info?.(`[${NS}] 更新检查完成：${r.updatesAvailable} 个可更新`)).catch(() => {}); }, 45000);
+  const first = setTimeout(() => {
+    checkUpdates().then(r => ctx.logger?.info?.(`[${NS}] 更新检查完成：${r.updatesAvailable} 个可更新`)).catch(() => {});
+    scanSkills().then(idx => translatePending(idx.skills)).catch(() => {});
+  }, 45000);
   first.unref?.();
 }

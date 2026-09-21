@@ -189,7 +189,8 @@ export async function scanSkills() {
       origin: prov[folder] || null,
     });
   }
-  return { built: localDateStr(new Date()), skillsDir: sd, total: skills.length, skills };
+  const generation = sha256Hex(folders.join("|"));
+  return { built: localDateStr(new Date()), generation, skillsDir: sd, total: skills.length, skills };
 }
 
 // ---------- 技能市场 ----------

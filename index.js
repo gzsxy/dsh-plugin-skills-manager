@@ -6,7 +6,8 @@
 //   GET  /api/skills-manager/market/list?source&path&q → 浏览市场源目录（GitHub）
 //   GET  /api/skills-manager/market/search?source&q    → 搜索（ClawdHub）
 //   POST /api/skills-manager/market/install            → 安装技能到 ~/.dsh/skills
-import { readFile, readdir, stat, mkdir, writeFile, rm } from "node:fs/promises";
+//   POST /api/skills-manager/uninstall                 → 卸载技能（默认移入回收目录）
+import { readFile, readdir, stat, mkdir, writeFile, rm, rename } from "node:fs/promises";
 import { spawnSync } from "node:child_process";
 import { homedir, tmpdir } from "node:os";
 import { join, dirname, resolve as resolvePath } from "node:path";
@@ -385,6 +386,34 @@ async function marketInstall(body) {
   }
 }
 
+// 卸载：默认移入 ~/.dsh/skills/.skills-manager/trash/（可手动找回）；permanent=true 时彻底删除
+async function marketUninstall(body) {
+  const name = String(body.name || "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+  if (!SKILL_NAME_RE.test(name)) throw new Error("技能名不合法");
+  const dir = join(skillsDir(), name);
+  const st = await stat(dir).catch(() => null);
+  if (!st || !st.isDirectory()) throw new Error(`技能不存在: ${name}`);
+  // 防误删：只允许卸载含 SKILL.md 的技能目录
+  const hasSkill = await stat(join(dir, "SKILL.md")).then(s => s.isFile()).catch(() => false);
+  if (!hasSkill) throw new Error("目标目录不含 SKILL.md，拒绝删除");
+  if (body.permanent) {
+    await rm(dir, { recursive: true, force: true });
+  } else {
+    const trashDir = join(skillsDir(), ".skills-manager", "trash");
+    await mkdir(trashDir, { recursive: true });
+    const dest = join(trashDir, `${name}@${Date.now()}`);
+    await rename(dir, dest).catch(async (e) => {
+      // 跨设备 rename 失败时退化为复制+删除
+      if (String(e).includes("EXDEV")) { await copyDir(dir, dest); await rm(dir, { recursive: true, force: true }); }
+      else throw e;
+    });
+  }
+  const prov = await loadProvenance();
+  delete prov[name];
+  await saveProvenance(prov);
+  return { status: 200, body: { ok: true, name, permanent: !!body.permanent } };
+}
+
 // ---------- HTTP ----------
 function sendJson(res, status, body) {
   const data = Buffer.from(JSON.stringify(body), "utf8");
@@ -440,6 +469,11 @@ export function createHandler() {
       if (route === "/market/install" && req.method === "POST") {
         const body = await readBody(req);
         const r = await marketInstall(body);
+        return sendJson(res, r.status, r.body);
+      }
+      if (route === "/uninstall" && req.method === "POST") {
+        const body = await readBody(req);
+        const r = await marketUninstall(body);
         return sendJson(res, r.status, r.body);
       }
       return sendJson(res, 404, { error: `unknown route: ${route}` });

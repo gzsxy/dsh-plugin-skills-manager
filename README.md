@@ -15,6 +15,7 @@ DSH Desktop 支持在 `~/.dsh/skills` 放置大量 Agent Skills（SKILL.md 格�
   - [ClawdHub 社区市场](https://clawdhub.com)（关键词搜索，数千社区技能）
   - 任意 GitHub 仓库（`owner/repo[/子路径]`）
 - 📋 **一键调用**：复制「让 Agent 加载」提示词，粘贴到对话即可按该技能执行
+- 🗑 **一键卸载**：界面直接卸载技能，默认移入回收目录 `~/.dsh/skills/.skills-manager/trash/` 防误删
 - 🌐 **中文翻译**：英文技能简介自动显示中文翻译，翻译表独立维护，改完即生效
 
 ![截图](docs/screenshot.jpg)
@@ -53,6 +54,7 @@ bash install.sh
 | `GET /api/skills-manager/market/list?source=&path=&q=` | 浏览 GitHub 源目录 |
 | `GET /api/skills-manager/market/search?source=clawdhub&q=` | ClawdHub 搜索 |
 | `POST /api/skills-manager/market/install` | 安装技能（参数见源码注释） |
+| `POST /api/skills-manager/uninstall` | 卸载技能 `{name}`，默认移入回收目录；`{name, permanent:true}` 彻底删除 |
 
 ## 架构
 

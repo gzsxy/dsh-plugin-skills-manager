@@ -50,6 +50,8 @@
   .btn:hover{border-color:var(--accent);color:var(--accent)}
   .btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
   .btn.primary:hover{opacity:.9;color:#fff}
+  .btn.danger{background:#e74c3c;border-color:#e74c3c;color:#fff}
+  .btn.danger:hover{opacity:.88;color:#fff}
   .btn.small{padding:4px 11px;font-size:12.5px}
   .btn:disabled{opacity:.5;cursor:not-allowed}
   input.txt{padding:9px 14px;border:1px solid var(--line);border-radius:10px;font-size:14px;background:var(--card);outline:none}
@@ -251,7 +253,9 @@ function openDetail(s){
     <div class="btns">
       <button class="btn primary" onclick="copyText(${JSON.stringify(loadPrompt).replace(/"/g,'&quot;')})">📋 复制调用提示词</button>
       <button class="btn" onclick="copyText('${esc(s.path)}')">复制路径</button>
-    </div>`;
+      <button class="btn danger" onclick="uninstallSkill('${esc(s.folder)}')">🗑 卸载</button>
+    </div>
+    <div style="margin-top:8px;font-size:12px;color:#9aa1b0">卸载会将技能移入 <code>~/.dsh/skills/.skills-manager/trash/</code>，可手动找回。</div>`;
   $('#overlay').classList.add('show');
 }
 function closePanel(){ $('#overlay').classList.remove('show'); }
@@ -367,6 +371,16 @@ async function doInstall(payload, btn){
     } else { toast('❌ 安装失败：' + (e.message||e)); }
   }
   btn.disabled = false; btn.textContent = old;
+  try { DATA = await api('/index'); $('#stat').textContent = `共 ${DATA.total} 个技能`; renderInstalled(); } catch {}
+}
+
+async function uninstallSkill(folder){
+  if (!confirm(`确定卸载技能「${folder}」？\n\n将从 ~/.dsh/skills 移除（移入回收目录 .skills-manager/trash/，可手动找回）。`)) return;
+  try {
+    const r = await api('/uninstall', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ name: folder }) });
+    toast(`✅ 已卸载「${r.name}」`);
+  } catch (e) { toast('❌ 卸载失败：' + (e.message||e)); }
+  closePanel();
   try { DATA = await api('/index'); $('#stat').textContent = `共 ${DATA.total} 个技能`; renderInstalled(); } catch {}
 }
 

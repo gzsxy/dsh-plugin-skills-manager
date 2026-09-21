@@ -1010,7 +1010,7 @@ export function createHandler() {
       }
       if (route === "/update/check" && req.method === "POST") {
         const r = await checkUpdates();
-        return sendJson(res, 200, { checkedAt: r.checkedAt, updatesAvailable: r.updatesAvailable, updates: r.updates });
+        return sendJson(res, 200, { checkedAt: r.checkedAt, updatesAvailable: r.updatesAvailable, updates: r.updates, status: r.status });
       }
       if (route === "/update/apply" && req.method === "POST") {
         const body = await readBody(req);

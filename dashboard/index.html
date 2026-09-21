@@ -242,11 +242,7 @@ async function init(){
   $('#stat').textContent = `共 ${DATA.total} 个技能`;
   $('#dir').textContent = DATA.skillsDir;
   $('#built').textContent = DATA.built || '—';
-  const cats = ['全部', ...new Set(DATA.skills.map(s=>s.category).sort())];
-  $('#chips').innerHTML = cats.map(c=>{
-    const n = c==='全部' ? DATA.total : DATA.skills.filter(s=>s.category===c).length;
-    return `<span class="chip${c==='全部'?' on':''}" data-cat="${c}">${c} <b>${n}</b></span>`;
-  }).join('');
+  renderChips();
   $('#chips').onclick = e=>{
     const chip = e.target.closest('.chip'); if(!chip) return;
     curCat = chip.dataset.cat;
@@ -342,7 +338,18 @@ function switchTab(tab){
 }
 
 // ---------- 已安装 ----------
+function renderChips(){
+  const upd = DATA.skills.filter(s=>hasUpdate(s.folder));
+  const cats = ['全部', ...(upd.length?['🔔 可更新']:[]), ...new Set(DATA.skills.map(s=>s.category).sort())];
+  $('#chips').innerHTML = cats.map(c=>{
+    let n = c==='全部' ? DATA.total : c==='🔔 可更新' ? upd.length : DATA.skills.filter(s=>s.category===c).length;
+    const on = curCat===c;
+    const extra = c==='🔔 可更新' ? ' style="background:#fff3e0;border-color:#e67e22;color:#e67e22"' : '';
+    return `<span class="chip${on?' on':''}" data-cat="${c}"${c==='🔔 可更新'?extra:''}>${c} <b>${n}</b></span>`;
+  }).join('');
+}
 function matchInstalled(s){
+  if(curCat==='🔔 可更新') return hasUpdate(s.folder);
   if(curCat!=='全部' && s.category!==curCat) return false;
   if(!curQ) return true;
   return (s.name+' '+disp(s)+' '+s.description+' '+s.category).toLowerCase().includes(curQ);
@@ -425,15 +432,17 @@ function renderUpdateDot(){
   const dot = document.getElementById('tab-dot');
   if (dot) dot.style.display = any ? 'inline-block' : 'none';
   renderInstalled();
+  try { renderChips(); } catch (e) { /* init 前忽略 */ }
 }
 async function runCheck(silent){
   const btn = $('#upd-check'); if(!btn) return;
   btn.disabled = true; const o = btn.textContent; btn.textContent = '检查中…';
   try {
-    const d = await api('/update/check', { method:'POST' });
-    updateStatus = d.status || {};
-    renderUpdateDot();
-    toast(d.updatesAvailable ? `🔔 ${d.updatesAvailable} 个技能有更新` : '✓ 已安装技能均为最新');
+    await api('/update/check', { method:'POST' });
+    await refreshUpdateStatus(true);
+    const names = DATA.skills.filter(s=>hasUpdate(s.folder)).map(s=>s.name);
+    renderChips();
+    toast(names.length ? `🔔 ${names.length} 个技能有更新：${names.slice(0,5).join('、')}${names.length>5?' 等' : ''}` : '✓ 已安装技能均为最新');
   } catch (e) { if(!silent) toast('❌ ' + (e.message||e)); }
   btn.disabled = false; btn.textContent = o;
 }

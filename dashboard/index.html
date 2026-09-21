@@ -191,6 +191,7 @@ window.addEventListener('unhandledrejection', e => {
   console.warn('[skills-manager] 未处理的 Promise 拒绝:', msg);
 });
 const $ = s => document.querySelector(s);
+try { const w = (window.parent && window.parent !== window) ? window.parent : window; const stuck = w.document.getElementById('sm-toast'); if (stuck) stuck.style.animation = 'smToastCycle 1.2s ease forwards'; } catch (e) {}
 let DATA = { built: '', skills: [], total: 0, skillsDir: '' };
 let curTab = 'installed', curCat = '全部', curQ = '';
 const installedNames = () => new Set(DATA.skills.map(s => s.folder));
@@ -210,19 +211,35 @@ const hasUpdate = n => !!(updateStatus[n] && updateStatus[n].hasUpdate);
 function esc(t){ return (t||'').replace(/&/g,'&amp;').replace(/</g,'&lt;'); }
 function disp(s){ return s.description_zh || s.description || ''; }
 function fmtSize(n){ return n>1048576 ? (n/1048576).toFixed(1)+' MB' : n>1024 ? (n/1024).toFixed(0)+' KB' : n+' B'; }
-function toast(msg){
-  // 优先把提示画到外层应用文档（同源），避免被 iframe 裁切
+let __smToastSeq = 0;
+function __smEnsureToastAssets() {
+  const w = (window.parent && window.parent !== window) ? window.parent : window;
   try {
+    const doc = w.document;
+    if (!doc.getElementById('sm-toast-style')) {
+      const st = doc.createElement('style'); st.id = 'sm-toast-style';
+      st.textContent = '#sm-toast{position:fixed;left:50%;bottom:34px;transform:translateX(-50%);background:#1c2330;color:#fff;padding:10px 22px;border-radius:999px;font:13.5px/1.5 -apple-system,"PingFang SC","Microsoft YaHei",sans-serif;z-index:2147483647;pointer-events:none;box-shadow:0 8px 24px rgba(0,0,0,.28);max-width:86vw;opacity:0}@keyframes smToastCycle{0%{opacity:0}8%,86%{opacity:.96}100%{opacity:0}}';
+      doc.head.appendChild(st);
+    }
+    const stuck = doc.getElementById('sm-toast');
+    if (stuck && !(stuck.style.animation || '').includes('smToastCycle')) stuck.style.animation = 'smToastCycle 1.2s ease forwards';
+  } catch (e) { /* 跨域忽略 */ }
+}
+function toast(msg){
+  // 用 CSS 动画控制自动消失（不依赖 JS 定时器，绝不会卡住不消失）
+  __smToastSeq++;
+  const seq = __smToastSeq;
+  try {
+    __smEnsureToastAssets();
     const w = (window.parent && window.parent !== window) ? window.parent : window;
     const doc = w.document;
     let t = doc.getElementById('sm-toast');
-    if (!t) {
-      t = doc.createElement('div'); t.id = 'sm-toast'; doc.body.appendChild(t);
-      t.style.cssText = 'position:fixed;left:50%;bottom:34px;transform:translateX(-50%);background:#1c2330;color:#fff;padding:10px 22px;border-radius:999px;font:13.5px/1.5 -apple-system,"PingFang SC","Microsoft YaHei",sans-serif;opacity:0;transition:.25s;z-index:2147483647;pointer-events:none;box-shadow:0 8px 24px rgba(0,0,0,.28);max-width:86vw;';
-    }
-    t.textContent = msg; t.style.opacity = '.96';
-    clearTimeout(t.__tt); t.__tt = setTimeout(()=>{ t.style.opacity = '0'; }, 2600);
-  } catch (e) { /* 跨域等异常时退回本页 */ }
+    if (!t) { t = doc.createElement('div'); t.id = 'sm-toast'; doc.body.appendChild(t); }
+    t.textContent = msg;
+    t.style.animation = 'none'; void t.offsetWidth; // 重启动画
+    t.style.animation = 'smToastCycle 3.2s ease forwards';
+    setTimeout(() => { if (t.__seq === seq) t.textContent = ''; }, 3600); // 清理文本（带序号防串扰）
+  } catch (e) { /* 跨域等异常时退回本页 toast */ }
   const t2 = $('#toast'); if (t2) { t2.textContent = msg; t2.classList.add('show');
     clearTimeout(window.__tt2); window.__tt2 = setTimeout(()=>t2.classList.remove('show'), 2200); }
 }
@@ -603,7 +620,9 @@ function renderGh(items){
       <div class="foot">
         <span>📄 ${it.files||0} 项</span>
         ${it.isSkill
-          ? `<button class="btn primary small" data-install="${esc(it.path)}" data-name="${esc(it.name)}">${installed?'重新安装':'📥 安装'}</button>${installed?`<button class="btn small" data-bindgh="${esc(it.path)}" data-bname="${esc(it.name)}">🔗 绑定更新</button>`:''}`
+          ? `${installed
+              ? `<span class="badge tr" style="align-self:center">✓ 已安装</span><button class="btn small" data-install="${esc(it.path)}" data-name="${esc(it.name)}" title="覆盖重装最新版">重装</button><button class="btn small" data-bindgh="${esc(it.path)}" data-bname="${esc(it.name)}" title="绑定后参与更新检查">🔗 绑定</button>`
+              : `<button class="btn primary small" data-install="${esc(it.path)}" data-name="${esc(it.name)}">📥 安装</button><button class="btn small" data-bindgh="${esc(it.path)}" data-bname="${esc(it.name)}" title="绑定后参与更新检查">🔗 绑定</button>`}`
           : `<button class="btn small" data-nav="${esc(it.path)}">进入 →</button>`}
         ${it.repoUrl?`<a class="btn small" href="${esc(it.repoUrl)}" target="_blank" rel="noopener" title="在 GitHub 打开来源仓库">↗</a>`:''}
       </div>
@@ -635,7 +654,9 @@ function renderClaw(items){
       <div class="cdesc">${esc(it.summary)||'<i>（无简介）</i>'}</div>
       <div class="foot"><span>⬇ ${it.downloads||0}</span><span style="font-size:11.5px">${esc(it.reference)}</span>
         ${it.repoUrl?`<a class="btn small" href="${esc(it.repoUrl)}" target="_blank" rel="noopener" title="打开来源页面">↗</a>`:''}
-        <button class="btn primary small" data-claw="${esc(it.slug)}" data-owner="${esc(it.ownerHandle||'')}">${local?'重新安装':'📥 安装'}</button></div>
+        ${local
+          ? `<span class="badge tr" style="align-self:center">✓ 已安装</span><button class="btn small" data-claw="${esc(it.slug)}" data-owner="${esc(it.ownerHandle||'')}" title="覆盖重装最新版">重装</button>`
+          : `<button class="btn primary small" data-claw="${esc(it.slug)}" data-owner="${esc(it.ownerHandle||'')}">📥 安装</button>`}</div>
     </div>`;
   }).join('') || '<div class="empty">没有搜索结果，换个关键词</div>';
   $('#mk-empty').style.display = 'none';
@@ -650,6 +671,9 @@ async function doInstall(payload, btn){
   try {
     const r = await api('/market/install', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload) });
     toast(`✅ 已安装「${r.name}」到 ~/.dsh/skills`);
+    await refreshData();
+    renderMarketPage();
+    return;
   } catch (e) {
     if (e.status===409 && e.data && e.data.needsForce){
       if (confirm(`技能「${e.data.name}」已存在，覆盖安装？`)){
@@ -659,7 +683,7 @@ async function doInstall(payload, btn){
     } else { toast('❌ 安装失败：' + (e.message||e)); }
   }
   btn.disabled = false; btn.textContent = old;
-  try { await refreshData(); } catch {}
+  try { await refreshData(); renderMarketPage(); } catch {}
 }
 
 // ---------- 导入 / 批量安装 ----------

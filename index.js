@@ -843,6 +843,33 @@ async function updateApply(name) {
   }
 }
 
+// 来源绑定：让手动安装的技能也参与更新检查
+async function bindSource(body) {
+  const name = normSlug(body.name);
+  if (!SKILL_NAME_RE.test(name)) throw new Error("技能名不合法");
+  const dir = join(skillsDir(), name);
+  const st = await stat(dir).catch(() => null);
+  if (!st || !st.isDirectory()) throw new Error(`技能不存在: ${name}`);
+  const repo = String(body.repo || "").replace(/^https?:\/\/github\.com\//, "").replace(/\.git$/, "").replace(/\/+$/, "");
+  if (!/^[\w.-]+\/[\w.-]+$/.test(repo)) throw new Error("repo 格式应为 owner/repo");
+  const prov = await loadProvenance();
+  const prev = prov[name] || {};
+  prov[name] = {
+    source: `github:${repo}`,
+    ref: String(body.ref || prev.ref || ""),
+    subPath: String(body.subPath || prev.subPath || ""),
+    installedAt: prev.installedAt || new Date().toISOString(),
+    boundAt: new Date().toISOString(),
+  };
+  await saveProvenance(prov);
+  return { ok: true, name };
+}
+async function unbindSource(name) {
+  const prov = await loadProvenance();
+  if (prov[normSlug(name)]) { delete prov[normSlug(name)]; await saveProvenance(prov); }
+  return { ok: true };
+}
+
 // ---------- HTTP ----------
 function sendJson(res, status, body) {
   const data = Buffer.from(JSON.stringify(body), "utf8");
@@ -955,6 +982,14 @@ export function createHandler() {
       if (route === "/update/apply" && req.method === "POST") {
         const body = await readBody(req);
         return sendJson(res, 200, await updateApply(String(body.name || "")));
+      }
+      if (route === "/bind" && req.method === "POST") {
+        const body = await readBody(req);
+        return sendJson(res, 200, await bindSource(body));
+      }
+      if (route === "/unbind" && req.method === "POST") {
+        const body = await readBody(req);
+        return sendJson(res, 200, await unbindSource(String(body.name || "")));
       }
       if (route === "/import/sources") {
         const out = [];

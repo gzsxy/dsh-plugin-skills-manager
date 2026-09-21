@@ -21,7 +21,8 @@ DSH Desktop 支持在 `~/.dsh/skills` 放置大量 Agent Skills（SKILL.md 格�
 - 📋 **一键调用**：复制「让 Agent 加载」提示词，粘贴到对话即可按该技能执行
 - 🗑 **一键卸载**：界面直接卸载技能，默认移入回收目录防误删
 - 🗑 **回收站**：已卸载技能可找回或彻底删除
-- 🔔 **更新检查**：自动定时（每 6 小时）+ 手动检查市场来源技能是否有新版本，红点提示 + 卡片「可更新」徽章 + 一键更新（GitHub 源用 Git blob SHA 对比，零额外配额；ClawdHub 源对比 zip 内 SKILL.md）
+- 🔔 **更新检查**：自动定时（每 6 小时）+ 手动检查技能是否有新版本，红点提示 + 卡片「可更新」徽章 + 一键更新（GitHub 源用 Git blob SHA 对比，零额外配额；ClawdHub 源对比 zip 内 SKILL.md）
+- 🔗 **来源绑定**：手动放置的技能可绑定到 GitHub 仓库（`owner/repo[/子路径]`），绑定后同样参与更新检查；市场安装的技能自动记录来源
 - 🌐 **中文翻译**：英文简介自动机器翻译成中文（多翻译源回退 + 本地缓存），也可在 `translations/zh.json` 手工维护
 - 🔄 **刷新 / 自愈**：顶部「🔄 刷新」重新扫描；页面轮询索引代次，过期自动刷新，杜绝旧页面残留
 
@@ -71,6 +72,8 @@ bash install.sh
 | `GET /api/skills-manager/update/status` | 更新检查缓存状态 |
 | `POST /api/skills-manager/update/check` | 立即执行一次更新检查 |
 | `POST /api/skills-manager/update/apply` | 一键更新 `{name}`（从来源重新安装并覆盖） |
+| `POST /api/skills-manager/bind` | 手动技能绑定来源 `{name, repo, subPath?}`，参与更新检查 |
+| `POST /api/skills-manager/unbind` | 解除绑定 `{name}` |
 | `POST /api/skills-manager/uninstall` | 卸载技能 `{name}`，默认移入回收目录；`{name, permanent:true}` 彻底删除 |
 
 ## 架构

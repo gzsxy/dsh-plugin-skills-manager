@@ -352,6 +352,15 @@ function openDetail(s){
       <dt>规模</dt><dd>${s.files} 个文件 · ${fmtSize(s.size)} · 更新于 ${s.mtime}</dd>
       <dt>路径</dt><dd><code>${esc(s.path)}</code></dd>
     </dl>
+    ${!s.origin?`<details style="margin-top:10px">
+      <summary style="cursor:pointer;font-size:12.5px;color:var(--accent)">🔗 绑定 GitHub 来源（启用更新检查）</summary>
+      <div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap;align-items:center">
+        <input class="txt" id="bind-repo" placeholder="owner/repo（如 anthropics/skills）" style="flex:1;min-width:170px">
+        <input class="txt" id="bind-sub" placeholder="仓库内子路径（可选）" style="width:190px">
+        <button class="btn small" onclick="bindFromPanel('${esc(s.folder)}')">保存绑定</button>
+      </div>
+      <div style="font-size:11.5px;color:#9aa1b0;margin-top:4px">绑定后「检查更新」会对比该仓库的 SKILL.md；「⬆ 更新」会用仓库版本覆盖本地修改。</div>
+    </details>`:''}
     <div style="font-size:13px;color:var(--sub)">目录内容</div>
     <div class="tree">${tree}</div>
     <div class="btns">
@@ -405,6 +414,17 @@ async function applyUpdate(name){
   closePanel();
   try { DATA = await api('/index'); renderInstalled(); } catch {}
   await refreshUpdateStatus(true);
+}
+async function bindFromPanel(folder){
+  const repo = ($('#bind-repo')||{}).value?.trim() || '';
+  const sub = ($('#bind-sub')||{}).value?.trim().replace(/^\/+|\/+$/g,'') || '';
+  if (!repo) { toast('请填写 owner/repo'); return; }
+  try {
+    await api('/bind', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ name: folder, repo, subPath: sub }) });
+    toast(`✅ 「${folder}」已绑定来源 ${repo}，将参与更新检查`);
+    DATA = await api('/index'); renderInstalled();
+    const s = DATA.skills.find(x=>x.folder===folder); if (s) openDetail(s);
+  } catch (e) { toast('❌ ' + (e.message||e)); }
 }
 async function uninstallSkill(folder){
   if (!confirm(`确定卸载技能「${folder}」？\n\n将从 ~/.dsh/skills 移除（移入回收目录，可在「回收站」标签页找回）。`)) return;
@@ -534,7 +554,7 @@ function renderGh(items){
       <div class="foot">
         <span>📄 ${it.files||0} 项</span>
         ${it.isSkill
-          ? `<button class="btn primary small" data-install="${esc(it.path)}" data-name="${esc(it.name)}">${installed?'重新安装':'📥 安装'}</button>`
+          ? `<button class="btn primary small" data-install="${esc(it.path)}" data-name="${esc(it.name)}">${installed?'重新安装':'📥 安装'}</button>${installed?`<button class="btn small" data-bindgh="${esc(it.path)}" data-bname="${esc(it.name)}">🔗 绑定更新</button>`:''}`
           : `<button class="btn small" data-nav="${esc(it.path)}">进入 →</button>`}
         ${it.repoUrl?`<a class="btn small" href="${esc(it.repoUrl)}" target="_blank" rel="noopener" title="在 GitHub 打开来源仓库">↗</a>`:''}
       </div>
@@ -547,6 +567,14 @@ function renderGh(items){
     if (nav){ mkPath = nav.dataset.nav; mkPage = 1; loadMarket(); return; }
     const btn = e.target.closest('[data-install]');
     if (btn) doInstall({ kind:'github', repo: (mkSource==='anthropics'?'anthropics/skills':mkSource==='superpowers'?'obra/superpowers':mkRepo), ref: mkRef||undefined, subPath: btn.dataset.install, name: btn.dataset.name }, btn);
+    const bbtn = e.target.closest('[data-bindgh]');
+    if (bbtn) {
+      const repo = (mkSource==='anthropics'?'anthropics/skills':mkSource==='superpowers'?'obra/superpowers':mkRepo);
+      const subPath = bbtn.dataset.bindgh;
+      api('/bind', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ name: bbtn.dataset.bname, repo, subPath }) })
+        .then(()=>toast(`✅ 已绑定更新来源 ${repo}`))
+        .catch(err=>toast('❌ '+(err.message||err)));
+    }
   };
 }
 function renderClaw(items){

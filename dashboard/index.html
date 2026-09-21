@@ -292,13 +292,9 @@ async function init(){
   $('#refresh-btn').onclick = async ()=>{
     const b = $('#refresh-btn'); b.disabled = true; const o = b.textContent; b.textContent = '刷新中…';
     try {
-      DATA = await api('/index');
       updateStatus = (await api('/update/status')).status || {};
-      $('#stat').textContent = `共 ${DATA.total} 个技能`;
-      $('#built').textContent = DATA.built || '—';
-      loadBuilt = DATA.built;
-      loadGen = DATA.generation || "";
-      renderInstalled();
+      renderUpdateDot();
+      await refreshData();
       toast('✓ 已重新扫描技能目录');
     } catch (e) { toast('❌ ' + (e.message||e)); }
     b.disabled = false; b.textContent = o;
@@ -338,6 +334,15 @@ function switchTab(tab){
 }
 
 // ---------- 已安装 ----------
+async function refreshData(){
+  DATA = await api('/index');
+  $('#stat').textContent = `共 ${DATA.total} 个技能`;
+  $('#built').textContent = DATA.built || '—';
+  loadBuilt = DATA.built;
+  loadGen = DATA.generation || "";
+  renderChips();
+  renderInstalled();
+}
 function renderChips(){
   const upd = DATA.skills.filter(s=>hasUpdate(s.folder));
   const cats = ['全部', ...(upd.length?['🔔 可更新']:[]), ...new Set(DATA.skills.map(s=>s.category).sort())];
@@ -453,7 +458,7 @@ async function applyUpdate(name){
     toast(`✅ 「${name}」已更新到最新版`);
   } catch (e) { toast('❌ 更新失败：' + (e.message||e)); }
   closePanel();
-  try { DATA = await api('/index'); renderInstalled(); } catch {}
+  try { await refreshData(); } catch {}
   await refreshUpdateStatus(true);
 }
 async function bindFromPanel(folder){
@@ -474,7 +479,7 @@ async function uninstallSkill(folder){
     toast(`✅ 已卸载「${r.name}」`);
   } catch (e) { toast('❌ 卸载失败：' + (e.message||e)); }
   closePanel();
-  try { DATA = await api('/index'); $('#stat').textContent = `共 ${DATA.total} 个技能`; renderInstalled(); } catch {}
+  try { await refreshData(); } catch {}
 }
 
 // ---------- 技能市场 ----------
@@ -654,7 +659,7 @@ async function doInstall(payload, btn){
     } else { toast('❌ 安装失败：' + (e.message||e)); }
   }
   btn.disabled = false; btn.textContent = old;
-  try { DATA = await api('/index'); $('#stat').textContent = `共 ${DATA.total} 个技能`; renderInstalled(); } catch {}
+  try { await refreshData(); } catch {}
 }
 
 // ---------- 导入 / 批量安装 ----------
@@ -731,7 +736,7 @@ async function loadTrash(){
       if (rs){
         try {
           await api('/trash/restore', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ entry: rs.dataset.restore }) });
-          toast('✅ 已找回'); DATA = await api('/index'); $('#stat').textContent = `共 ${DATA.total} 个技能`; renderInstalled(); loadTrash();
+          toast('✅ 已找回'); await refreshData(); loadTrash();
         } catch (err) { toast('❌ ' + (err.message||err)); }
         return;
       }

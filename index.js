@@ -870,6 +870,38 @@ async function unbindSource(name) {
   return { ok: true };
 }
 
+// 批量绑定：把本地已安装、且在仓库中存在同名目录的技能，批量绑定到该仓库
+async function bindBatch(body) {
+  const repo = String(body.repo || "").replace(/^https?:\/\/github\.com\//, "").replace(/\.git$/, "").replace(/\/+$/, "");
+  if (!/^[\w.-]+\/[\w.-]+$/.test(repo)) throw new Error("repo 格式应为 owner/repo");
+  const rootPath = String(body.rootPath || "").replace(/^\/+|\/+$/g, "");
+  const { tree } = await getRepoTree(repo, body.ref || undefined);
+  const skillSet = new Set(
+    tree.filter(n => n.type === "blob" && n.path.split("/").pop() === "SKILL.md")
+        .map(n => n.path.slice(0, n.path.lastIndexOf("/")))
+  );
+  let folders = [];
+  try { folders = (await readdir(skillsDir(), { withFileTypes: true })).filter(d => d.isDirectory()).map(d => d.name); } catch {}
+  const bound = [], unmatched = [];
+  const prov = await loadProvenance();
+  const now = new Date().toISOString();
+  for (const name of folders) {
+    const sub = rootPath ? rootPath + "/" + name : name;
+    if (!skillSet.has(sub)) { unmatched.push(name); continue; }
+    const prev = prov[name] || {};
+    prov[name] = {
+      source: `github:${repo}`,
+      ref: String(body.ref || prev.ref || ""),
+      subPath: sub,
+      installedAt: prev.installedAt || now,
+      boundAt: now,
+    };
+    bound.push(name);
+  }
+  await saveProvenance(prov);
+  return { ok: true, repo, bound, unmatched };
+}
+
 // ---------- HTTP ----------
 function sendJson(res, status, body) {
   const data = Buffer.from(JSON.stringify(body), "utf8");
@@ -986,6 +1018,10 @@ export function createHandler() {
       if (route === "/bind" && req.method === "POST") {
         const body = await readBody(req);
         return sendJson(res, 200, await bindSource(body));
+      }
+      if (route === "/bind-batch" && req.method === "POST") {
+        const body = await readBody(req);
+        return sendJson(res, 200, await bindBatch(body));
       }
       if (route === "/unbind" && req.method === "POST") {
         const body = await readBody(req);

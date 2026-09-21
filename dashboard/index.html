@@ -122,6 +122,7 @@
     </div>
     <div class="chips" id="mk-cats"></div>
     <div class="crumb" id="mk-crumb" style="margin-top:10px"></div>
+    <div style="margin-top:6px"><button class="btn small" id="mk-bindall" style="display:none" title="把本地已安装、且在该仓库中存在同名目录的技能，批量绑定到当前仓库">🔗 批量绑定已安装技能</button></div>
     <div class="pager" id="mk-pager"></div>
   </div>
   <div class="toolbar" id="toolbar-trash" style="display:none">
@@ -248,6 +249,20 @@ async function init(){
   document.querySelectorAll('.tab').forEach(t=>t.onclick = ()=>switchTab(t.dataset.tab));
   $('#mk-go').onclick = ()=>{ mkQuery = $('#mk-q').value.trim(); mkPage = 1; loadMarket(); };
   $('#mk-q').onkeydown = e=>{ if(e.key==='Enter'){ mkQuery = $('#mk-q').value.trim(); mkPage = 1; loadMarket(); } };
+  $('#mk-bindall').onclick = async ()=>{
+    const repo = (mkSource==='anthropics'?'anthropics/skills':mkSource==='superpowers'?'obra/superpowers':mkRepo);
+    if (!repo) { toast('请先填写 owner/repo'); return; }
+    if (!confirm(`把本地已安装、且在 ${repo} 中存在同名目录的技能，批量绑定到该仓库？\n（用于启用这些技能的更新检查）`)) return;
+    const btn = $('#mk-bindall'); btn.disabled = true; const o = btn.textContent; btn.textContent = '绑定中…';
+    try {
+      const r = await api('/bind-batch', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ repo, rootPath: mkPath || (mkSource==='anthropics'?'skills':mkSource==='superpowers'?'skills':''), ref: mkRef || undefined }) });
+      const b = r;
+      let msg = `✅ 已绑定 ${b.bound.length} 个`;
+      if (b.unmatched && b.unmatched.length) msg += `，${b.unmatched.length} 个在仓库中无同名目录：${b.unmatched.slice(0,8).join(', ')}`;
+      toast(msg);
+    } catch (e) { toast('❌ ' + (e.message||e)); }
+    btn.disabled = false; btn.textContent = o;
+  };
   $('#mk-loadrepo').onclick = ()=>{
     mkRepo = $('#mk-repo').value.trim().replace(/^https?:\/\/github\.com\//,'').replace(/\.git$/,'');
     mkRef = $('#mk-ref').value.trim() || '';
@@ -301,9 +316,11 @@ function switchTab(tab){
   $('#view-installed').style.display = tab==='installed' ? '' : 'none';
   $('#view-market').style.display = tab==='market' ? '' : 'none';
   $('#view-trash').style.display = tab==='trash' ? '' : 'none';
+  $('#view-import').style.display = tab==='import' ? '' : 'none';
   $('#toolbar-installed').style.display = tab==='installed' ? '' : 'none';
   $('#toolbar-market').style.display = tab==='market' ? '' : 'none';
   $('#toolbar-trash').style.display = tab==='trash' ? '' : 'none';
+  $('#toolbar-import').style.display = tab==='import' ? '' : 'none';
   if(tab==='market' && !$('#mk-grid').dataset.loaded) loadMarket();
   if(tab==='trash') loadTrash();
   if(tab==='import' && !$('#imp-sources').dataset.loaded) loadImportSources();
@@ -456,6 +473,9 @@ function renderSourceChips(){
     renderSourceChips(); loadMarket();
   };
   $('#mk-custom').style.display = mkSource==='github' ? 'flex' : 'none';
+  const isGhSrc = mkSource==='anthropics' || mkSource==='superpowers' || mkSource==='github';
+  const bindAll = document.getElementById('mk-bindall');
+  if (bindAll) bindAll.style.display = isGhSrc ? 'inline-block' : 'none';
   const isClaw = mkSource==='clawdhub';
   $('#mk-q').placeholder = isClaw ? '搜索 ClawdHub 社区技能（如 pdf、ppt、web）…' : '过滤当前目录列表…';
 }

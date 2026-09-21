@@ -1,6 +1,6 @@
 {
   "name": "dsh-plugin-skills-manager",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "private": true,
   "description": "DSH 技能管理台：浏览/搜索/分类全部已安装技能，英文简介中文翻译，查看依赖与目录结构，一键复制调用提示词。",
   "type": "module",

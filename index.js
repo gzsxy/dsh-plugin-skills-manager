@@ -9,6 +9,7 @@
 //   POST /api/skills-manager/uninstall                 → 卸载技能（默认移入回收目录）
 import { readFile, readdir, stat, mkdir, writeFile, rm, rename } from "node:fs/promises";
 import { spawnSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import { homedir, tmpdir } from "node:os";
 import { join, dirname, sep, resolve as resolvePath } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -666,6 +667,127 @@ async function installSkillDir(dir, fallbackName, provenance, force) {
   return { status: 200, body: { ok: true, name, path: destDir, description: fm.description || "" } };
 }
 
+// ---------- 更新检查 ----------
+function sha256Hex(s) { return createHash("sha256").update(s).digest("hex"); }
+function gitBlobSha(buf) { return createHash("sha1").update(`blob ${buf.length}\0`).update(buf).digest("hex"); }
+function updateStatusFile() { return join(skillsDir(), ".skills-manager", "update-status.json"); }
+async function loadUpdateStatus() {
+  try { return JSON.parse(await readFile(updateStatusFile(), "utf8")); } catch { return {}; }
+}
+async function saveUpdateStatus(s) {
+  await mkdir(dirname(updateStatusFile()), { recursive: true });
+  await writeFile(updateStatusFile(), JSON.stringify(s, null, 1), "utf8");
+}
+let __checking = false;
+async function checkUpdates() {
+  if (__checking) return loadUpdateStatus();
+  __checking = true;
+  try {
+    const prov = await loadProvenance();
+    const status = await loadUpdateStatus();
+    const now = new Date().toISOString();
+    // GitHub 来源：按仓库分组，一次树请求校验全部（blob sha 对比）
+    const byRepo = {};
+    for (const [name, p] of Object.entries(prov)) {
+      if (p.source && p.source.startsWith("github:")) {
+        const repo = p.source.slice(7);
+        (byRepo[repo] = byRepo[repo] || []).push({ name, p });
+      }
+    }
+    for (const [repo, items] of Object.entries(byRepo)) {
+      try {
+        const ref = items[0].p.ref || undefined;
+        const { tree } = await getRepoTree(repo, ref);
+        const branch = ref || "main";
+        for (const it of items) {
+          const sub = it.p.subPath ? it.p.subPath + "/" : "";
+          const mdPath = sub + "SKILL.md";
+          const blob = tree.find(n => n.type === "blob" && n.path === mdPath);
+          const localBuf = await readFile(join(skillsDir(), it.name, "SKILL.md")).catch(() => null);
+          if (!blob) { status[it.name] = { hasUpdate: false, checkedAt: now, note: "远端已移除" }; continue; }
+          if (!localBuf) { status[it.name] = { hasUpdate: false, checkedAt: now }; continue; }
+          status[it.name] = {
+            hasUpdate: blob.sha !== gitBlobSha(localBuf),
+            checkedAt: now, remoteSha: blob.sha,
+            repoUrl: `https://github.com/${repo}/tree/${branch}/${it.p.subPath || ""}`,
+          };
+        }
+      } catch (e) { /* 该仓库本轮跳过 */ }
+    }
+    // ClawdHub 来源：下载 zip 对比 SKILL.md
+    for (const [name, p] of Object.entries(prov)) {
+      if (!p.source || !p.source.startsWith("clawdhub:")) continue;
+      const refPart = p.source.slice(9);
+      const slash = refPart.indexOf("/");
+      const owner = slash >= 0 ? refPart.slice(0, slash) : "";
+      const slug = slash >= 0 ? refPart.slice(slash + 1) : refPart;
+      try {
+        let url = `https://clawdhub.com/api/v1/download?slug=${encodeURIComponent(slug)}`;
+        if (owner) url += `&ownerHandle=${encodeURIComponent(owner)}`;
+        const r = await fetch(url, { headers: { "User-Agent": NS }, signal: AbortSignal.timeout(30000) });
+        if (!r.ok) throw new Error("HTTP " + r.status);
+        const tmp = join(tmpdir(), `${NS}-chk-${Date.now()}.zip`);
+        await writeFile(tmp, Buffer.from(await r.arrayBuffer()));
+        const unp = spawnSync("unzip", ["-p", tmp, "SKILL.md"], { encoding: "utf8", timeout: 30000 });
+        await rm(tmp, { force: true });
+        const remoteMd = unp.status === 0 ? unp.stdout : null;
+        const localMd = await readFile(join(skillsDir(), name, "SKILL.md"), "utf8").catch(() => null);
+        status[name] = {
+          hasUpdate: !!remoteMd && !!localMd && sha256Hex(remoteMd) !== sha256Hex(localMd),
+          checkedAt: now,
+        };
+      } catch (e) { status[name] = { hasUpdate: false, checkedAt: now, error: String(e && e.message || e) }; }
+    }
+    await saveUpdateStatus(status);
+    const updates = Object.keys(status).filter(n => status[n] && status[n].hasUpdate);
+    return { checkedAt: now, updatesAvailable: updates.length, updates, status };
+  } finally { __checking = false; }
+}
+async function updateApply(name) {
+  const prov = await loadProvenance();
+  const p = prov[name];
+  if (!p || !p.source) throw new Error("没有来源记录，无法自动更新");
+  const tmp = join(tmpdir(), `${NS}-upd-${Date.now()}-${Math.random().toString(36).slice(2)}`);
+  await mkdir(tmp, { recursive: true });
+  try {
+    let srcDir;
+    if (p.source.startsWith("github:")) {
+      const repo = p.source.slice(7);
+      const tgz = join(tmp, "repo.tgz");
+      await downloadTo(`https://codeload.github.com/${repo}/tar.gz/HEAD`, tgz);
+      const list = runTar(["-tzf", tgz]).stdout.split("\n").filter(Boolean);
+      checkTarSafe(list);
+      const src = join(tmp, "src");
+      await mkdir(src, { recursive: true });
+      runTar(["-xzf", tgz, "-C", src, "--strip-components", "1"]);
+      srcDir = p.subPath ? join(src, p.subPath) : src;
+    } else if (p.source.startsWith("clawdhub:")) {
+      const refPart = p.source.slice(9);
+      const slash = refPart.indexOf("/");
+      const owner = slash >= 0 ? refPart.slice(0, slash) : "";
+      const slug = slash >= 0 ? refPart.slice(slash + 1) : refPart;
+      let url = `https://clawdhub.com/api/v1/download?slug=${encodeURIComponent(slug)}`;
+      if (owner) url += `&ownerHandle=${encodeURIComponent(owner)}`;
+      const zip = join(tmp, "skill.zip");
+      await downloadTo(url, zip);
+      const dest = join(tmp, "unzip");
+      await mkdir(dest, { recursive: true });
+      const uz = spawnSync("unzip", ["-q", "-o", zip, "-d", dest]);
+      if (uz.status !== 0) throw new Error("解压失败");
+      srcDir = dest;
+    } else {
+      throw new Error("该技能来源不支持自动更新，请卸载后重新安装");
+    }
+    const r = await installSkillDir(srcDir, name, { ...p, installedAt: new Date().toISOString() }, true);
+    if (r.status !== 200) throw new Error(r.body.error || "更新失败");
+    const status = await loadUpdateStatus();
+    if (status[name]) { status[name].hasUpdate = false; status[name].checkedAt = new Date().toISOString(); await saveUpdateStatus(status); }
+    return { ok: true, name, path: r.body.path };
+  } finally {
+    await rm(tmp, { recursive: true, force: true }).catch(() => {});
+  }
+}
+
 // ---------- HTTP ----------
 function sendJson(res, status, body) {
   const data = Buffer.from(JSON.stringify(body), "utf8");
@@ -761,6 +883,19 @@ export function createHandler() {
         const body = await readBody(req);
         return sendJson(res, 200, await trashDelete(String(body.entry || "")));
       }
+      if (route === "/update/status") {
+        const status = await loadUpdateStatus();
+        const updates = Object.keys(status).filter(n => status[n] && status[n].hasUpdate);
+        return sendJson(res, 200, { checkedAt: updates.length ? Math.max(...Object.values(status).map(s => Date.parse(s.checkedAt) || 0)) : 0, updatesAvailable: updates.length, updates, status });
+      }
+      if (route === "/update/check" && req.method === "POST") {
+        const r = await checkUpdates();
+        return sendJson(res, 200, { checkedAt: r.checkedAt, updatesAvailable: r.updatesAvailable, updates: r.updates });
+      }
+      if (route === "/update/apply" && req.method === "POST") {
+        const body = await readBody(req);
+        return sendJson(res, 200, await updateApply(String(body.name || "")));
+      }
       if (route === "/import/sources") {
         const out = [];
         for (const s of IMPORT_SOURCES) {
@@ -798,4 +933,9 @@ export async function apply(ctx) {
     `${NS}: api routes`
   );
   ctx.logger?.info?.(`[${NS}] 技能管理台就绪：/api/skills-manager/dashboard（含技能市场）`);
+  // 定时检查技能更新：45 秒后首查，此后每 6 小时
+  const timer = setInterval(() => { checkUpdates().catch(() => {}); }, 6 * 60 * 60 * 1000);
+  timer.unref?.();
+  const first = setTimeout(() => { checkUpdates().then(r => ctx.logger?.info?.(`[${NS}] 更新检查完成：${r.updatesAvailable} 个可更新`)).catch(() => {}); }, 45000);
+  first.unref?.();
 }

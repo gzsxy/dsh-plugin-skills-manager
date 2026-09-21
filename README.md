@@ -21,6 +21,7 @@ DSH Desktop 支持在 `~/.dsh/skills` 放置大量 Agent Skills（SKILL.md 格�
 - 📋 **一键调用**：复制「让 Agent 加载」提示词，粘贴到对话即可按该技能执行
 - 🗑 **一键卸载**：界面直接卸载技能，默认移入回收目录防误删
 - 🗑 **回收站**：已卸载技能可找回或彻底删除
+- 🔔 **更新检查**：自动定时（每 6 小时）+ 手动检查市场来源技能是否有新版本，红点提示 + 卡片「可更新」徽章 + 一键更新（GitHub 源用 Git blob SHA 对比，零额外配额；ClawdHub 源对比 zip 内 SKILL.md）
 - 🌐 **中文翻译**：英文技能简介自动显示中文翻译，翻译表独立维护，改完即生效
 
 ![截图](docs/screenshot.jpg)
@@ -66,6 +67,9 @@ bash install.sh
 | `GET /api/skills-manager/trash` | 回收站列表 |
 | `POST /api/skills-manager/trash/restore` | 找回 `{entry}` |
 | `POST /api/skills-manager/trash/delete` | 彻底删除 `{entry}` |
+| `GET /api/skills-manager/update/status` | 更新检查缓存状态 |
+| `POST /api/skills-manager/update/check` | 立即执行一次更新检查 |
+| `POST /api/skills-manager/update/apply` | 一键更新 `{name}`（从来源重新安装并覆盖） |
 | `POST /api/skills-manager/uninstall` | 卸载技能 `{name}`，默认移入回收目录；`{name, permanent:true}` 彻底删除 |
 
 ## 架构

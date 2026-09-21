@@ -1,0 +1,376 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Skills 管理台 · DSH</title>
+<style>
+  :root{
+    --bg:#f6f7f9; --card:#ffffff; --ink:#1c2330; --sub:#69707f; --line:#e6e8ee;
+    --accent:#3b6ef5; --accent-soft:#eaf0ff; --chip:#eef0f4; --ok:#1a9c53; --ok-soft:#eafaf0;
+    --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--bg);color:var(--ink);font:15px/1.65 -apple-system,"PingFang SC","Microsoft YaHei",sans-serif;padding-bottom:60px}
+  header{position:sticky;top:0;z-index:10;background:rgba(246,247,249,.94);backdrop-filter:blur(8px);border-bottom:1px solid var(--line);padding:16px 24px 0}
+  h1{font-size:20px;display:flex;align-items:center;gap:10px}
+  h1 .logo{width:28px;height:28px;border-radius:8px;background:linear-gradient(135deg,#3b6ef5,#7a4df8);color:#fff;display:inline-flex;align-items:center;justify-content:center;font-size:14px;font-weight:700}
+  .meta-line{color:var(--sub);font-size:12.5px;margin-top:2px}
+  .tabs{display:flex;gap:4px;margin-top:12px}
+  .tab{padding:8px 18px;border:1px solid transparent;border-bottom:none;border-radius:10px 10px 0 0;cursor:pointer;font-size:14px;color:var(--sub);user-select:none;background:transparent}
+  .tab.on{background:var(--card);border-color:var(--line);color:var(--ink);font-weight:600}
+  .toolbar{padding:12px 0}
+  .search-wrap{position:relative;display:flex;gap:8px;align-items:center}
+  #q{flex:1;padding:9px 14px 9px 36px;border:1px solid var(--line);border-radius:10px;font-size:14px;background:var(--card);outline:none}
+  #q:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+  .search-wrap svg{position:absolute;left:11px;top:50%;transform:translateY(-50%);width:15px;height:15px;fill:none;stroke:#9aa1b0;stroke-width:2}
+  .chips{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
+  .chip{padding:4px 12px;border-radius:999px;background:var(--chip);color:var(--sub);font-size:13px;cursor:pointer;border:1px solid transparent;user-select:none}
+  .chip b{color:var(--ink);font-weight:600}
+  .chip.on{background:var(--accent-soft);border-color:var(--accent);color:var(--accent)}
+  .chip.on b{color:var(--accent)}
+  main{max-width:1180px;margin:0 auto;padding:16px 24px}
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(330px,1fr));gap:14px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px;transition:.15s;display:flex;flex-direction:column;gap:8px}
+  .card.clickable{cursor:pointer}
+  .card.clickable:hover{border-color:var(--accent);box-shadow:0 4px 18px rgba(59,110,245,.10);transform:translateY(-1px)}
+  .row1{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+  .badge{font-size:11.5px;padding:2px 9px;border-radius:999px;background:var(--accent-soft);color:var(--accent);white-space:nowrap}
+  .badge.tr{background:var(--ok-soft);color:var(--ok)}
+  .badge.gray{background:var(--chip);color:var(--sub)}
+  .cname{font-family:var(--mono);font-size:14.5px;font-weight:600;word-break:break-all}
+  .cdesc{color:var(--sub);font-size:13px;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
+  .foot{display:flex;gap:12px;color:#9aa1b0;font-size:11.5px;margin-top:auto;flex-wrap:wrap;align-items:center}
+  .empty{text-align:center;color:var(--sub);padding:60px 0}
+  .banner{max-width:1180px;margin:14px auto 0;padding:10px 16px;border-radius:10px;font-size:13.5px;display:none}
+  .banner.err{display:block;background:#fdecec;color:#c0392b;border:1px solid #f5c6c6}
+  .crumb{font-size:13px;color:var(--sub);margin-bottom:10px}
+  .crumb a{color:var(--accent);cursor:pointer;text-decoration:none}
+  .btn{border:1px solid var(--line);background:var(--card);border-radius:9px;padding:6px 13px;font-size:13px;cursor:pointer;color:var(--ink);white-space:nowrap}
+  .btn:hover{border-color:var(--accent);color:var(--accent)}
+  .btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+  .btn.primary:hover{opacity:.9;color:#fff}
+  .btn.small{padding:4px 11px;font-size:12.5px}
+  .btn:disabled{opacity:.5;cursor:not-allowed}
+  input.txt{padding:9px 14px;border:1px solid var(--line);border-radius:10px;font-size:14px;background:var(--card);outline:none}
+  input.txt:focus{border-color:var(--accent)}
+  #overlay{position:fixed;inset:0;background:rgba(20,26,40,.45);display:none;z-index:50;align-items:flex-start;justify-content:center;padding:40px 16px;overflow:auto}
+  #overlay.show{display:flex}
+  .panel{background:var(--card);border-radius:16px;max-width:760px;width:100%;padding:26px 28px;position:relative;box-shadow:0 20px 60px rgba(0,0,0,.25)}
+  .panel h2{font-family:var(--mono);font-size:19px;padding-right:30px;word-break:break-all}
+  .panel .close{position:absolute;right:16px;top:14px;border:none;background:var(--chip);width:30px;height:30px;border-radius:8px;font-size:15px;cursor:pointer;color:var(--sub)}
+  .panel .close:hover{background:var(--accent-soft);color:var(--accent)}
+  .panel .desc{margin:12px 0 4px;font-size:14.5px}
+  .orig{margin-top:8px;font-size:13px;color:var(--sub);background:#fafbfc;border:1px dashed var(--line);border-radius:10px;padding:10px 14px;display:none}
+  .orig.show{display:block}
+  .toggle-orig{margin-top:6px;background:none;border:none;color:var(--accent);cursor:pointer;font-size:12.5px;padding:0}
+  .kv{display:grid;grid-template-columns:96px 1fr;gap:6px 12px;margin:14px 0;font-size:13px}
+  .kv dt{color:var(--sub)}
+  .kv dd{word-break:break-all}
+  .dep{display:inline-block;background:var(--chip);border-radius:6px;padding:1px 8px;margin:2px 4px 2px 0;font-family:var(--mono);font-size:12px}
+  .tree{background:#fafbfc;border:1px solid var(--line);border-radius:10px;padding:10px 14px;font-family:var(--mono);font-size:12.5px;color:var(--sub);margin-top:6px;max-height:180px;overflow:auto}
+  .tree .d{color:var(--accent);font-weight:600}
+  .btns{display:flex;gap:10px;margin-top:18px;flex-wrap:wrap}
+  #toast{position:fixed;left:50%;bottom:34px;transform:translateX(-50%);background:var(--ink);color:#fff;padding:9px 20px;border-radius:999px;font-size:13.5px;opacity:0;pointer-events:none;transition:.25s;z-index:99}
+  #toast.show{opacity:.95}
+  footer{max-width:1180px;margin:26px auto 0;padding:0 24px;color:#9aa1b0;font-size:12.5px}
+  code{font-family:var(--mono);background:var(--chip);padding:1px 6px;border-radius:5px;font-size:12px}
+</style>
+</head>
+<body>
+<header>
+  <h1><span class="logo">S</span>Skills 管理台 <span id="stat" class="meta-line"></span></h1>
+  <div class="meta-line">索引目录 <span id="dir">加载中…</span> · 生成于 <span id="built">—</span> · 绿标=已译为中文</div>
+  <div class="tabs">
+    <div class="tab on" data-tab="installed">📦 已安装</div>
+    <div class="tab" data-tab="market">🛒 技能市场</div>
+  </div>
+  <div class="toolbar" id="toolbar-installed">
+    <div class="search-wrap">
+      <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
+      <input id="q" placeholder="搜索已安装技能…（快捷键 /）" autocomplete="off">
+    </div>
+    <div class="chips" id="chips"></div>
+  </div>
+  <div class="toolbar" id="toolbar-market" style="display:none">
+    <div class="chips" id="mk-chips"></div>
+    <div class="search-wrap" style="margin-top:10px">
+      <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
+      <input id="mk-q" placeholder="搜索市场技能…" autocomplete="off">
+      <button class="btn" id="mk-go">搜索</button>
+    </div>
+    <div id="mk-custom" style="display:none;margin-top:10px;gap:8px;flex-wrap:wrap;align-items:center">
+      <input class="txt" id="mk-repo" placeholder="owner/repo（如 anthropics/skills）" style="flex:1;min-width:220px">
+      <input class="txt" id="mk-ref" placeholder="分支（默认 main）" style="width:150px">
+      <button class="btn" id="mk-loadrepo">浏览仓库</button>
+    </div>
+    <div class="crumb" id="mk-crumb" style="margin-top:10px"></div>
+  </div>
+</header>
+
+<main>
+  <div class="banner" id="banner"></div>
+  <div id="view-installed">
+    <div class="grid" id="grid"></div>
+    <div class="empty" id="empty" style="display:none">没有匹配的技能，换个关键词试试</div>
+  </div>
+  <div id="view-market" style="display:none">
+    <div class="grid" id="mk-grid"></div>
+    <div class="empty" id="mk-empty" style="display:none">没有匹配结果</div>
+  </div>
+</main>
+
+<footer>
+  提示：「已安装」实时重扫 <code>~/.dsh/skills</code>；市场安装的技能立即出现在「已安装」中；让 Agent 加载技能：卡片 →「复制调用提示词」。
+</footer>
+
+<div id="overlay"><div class="panel" id="panel"></div></div>
+<div id="toast"></div>
+
+<script>
+window.addEventListener('error', e => {
+  // 无 message 的事件是资源加载错误（favicon 等），忽略，不展示横幅
+  if (!e || !e.message) return;
+  const b = document.getElementById('banner');
+  if (b) { b.textContent = '⚠ 页面脚本错误: ' + e.message; b.className = 'banner err'; }
+});
+const $ = s => document.querySelector(s);
+let DATA = { built: '', skills: [], total: 0, skillsDir: '' };
+let curTab = 'installed', curCat = '全部', curQ = '';
+let mkSource = 'anthropics', mkPath = '', mkRepo = '', mkRef = '', mkQuery = '';
+let SOURCES = [];
+const installedNames = () => new Set(DATA.skills.map(s => s.folder));
+
+function esc(t){ return (t||'').replace(/&/g,'&amp;').replace(/</g,'&lt;'); }
+function disp(s){ return s.description_zh || s.description || ''; }
+function fmtSize(n){ return n>1048576 ? (n/1048576).toFixed(1)+' MB' : n>1024 ? (n/1024).toFixed(0)+' KB' : n+' B'; }
+function toast(msg){
+  const t=$('#toast'); t.textContent=msg; t.classList.add('show');
+  clearTimeout(window.__tt); window.__tt=setTimeout(()=>t.classList.remove('show'),2200);
+}
+async function api(path, opts){ const r = await fetch('/api/skills-manager'+path, Object.assign({cache:'no-store'}, opts||{})); const d = await r.json().catch(()=>({})); if(!r.ok) throw Object.assign(new Error(d.error||('HTTP '+r.status)), {data:d, status:r.status}); return d; }
+
+async function init(){
+  try {
+    DATA = await api('/index');
+    const s = await api('/market/sources');
+    SOURCES = s.sources || [];
+  } catch (e) {
+    const b = $('#banner');
+    b.textContent = '⚠ 无法加载技能索引（' + (e.message || e) + '）。请确认 DSH 已启动且插件已安装。';
+    b.className = 'banner err';
+    return;
+  }
+  $('#stat').textContent = `共 ${DATA.total} 个技能`;
+  $('#dir').textContent = DATA.skillsDir;
+  $('#built').textContent = DATA.built || '—';
+  const cats = ['全部', ...new Set(DATA.skills.map(s=>s.category).sort())];
+  $('#chips').innerHTML = cats.map(c=>{
+    const n = c==='全部' ? DATA.total : DATA.skills.filter(s=>s.category===c).length;
+    return `<span class="chip${c==='全部'?' on':''}" data-cat="${c}">${c} <b>${n}</b></span>`;
+  }).join('');
+  $('#chips').onclick = e=>{
+    const chip = e.target.closest('.chip'); if(!chip) return;
+    curCat = chip.dataset.cat;
+    document.querySelectorAll('#chips .chip').forEach(x=>x.classList.toggle('on', x===chip));
+    renderInstalled();
+  };
+  $('#q').oninput = e=>{ curQ = e.target.value.trim().toLowerCase(); renderInstalled(); };
+  document.addEventListener('keydown', e=>{
+    if(e.key==='/' && document.activeElement!==$('#q')){ e.preventDefault(); $('#q').focus(); }
+    if(e.key==='Escape') closePanel();
+  });
+  $('#overlay').onclick = e=>{ if(e.target.id==='overlay') closePanel(); };
+  document.querySelectorAll('.tab').forEach(t=>t.onclick = ()=>switchTab(t.dataset.tab));
+  $('#mk-go').onclick = ()=>{ mkQuery = $('#mk-q').value.trim(); loadMarket(); };
+  $('#mk-q').onkeydown = e=>{ if(e.key==='Enter'){ mkQuery = $('#mk-q').value.trim(); loadMarket(); } };
+  $('#mk-loadrepo').onclick = ()=>{
+    mkRepo = $('#mk-repo').value.trim().replace(/^https?:\/\/github\.com\//,'').replace(/\.git$/,'');
+    mkRef = $('#mk-ref').value.trim() || '';
+    mkPath = ''; loadMarket();
+  };
+  renderInstalled();
+  renderSourceChips();
+}
+
+function switchTab(tab){
+  curTab = tab;
+  document.querySelectorAll('.tab').forEach(t=>t.classList.toggle('on', t.dataset.tab===tab));
+  $('#view-installed').style.display = tab==='installed' ? '' : 'none';
+  $('#view-market').style.display = tab==='market' ? '' : 'none';
+  $('#toolbar-installed').style.display = tab==='installed' ? '' : 'none';
+  $('#toolbar-market').style.display = tab==='market' ? '' : 'none';
+  if(tab==='market' && !$('#mk-grid').dataset.loaded) loadMarket();
+}
+
+// ---------- 已安装 ----------
+function matchInstalled(s){
+  if(curCat!=='全部' && s.category!==curCat) return false;
+  if(!curQ) return true;
+  return (s.name+' '+disp(s)+' '+s.description+' '+s.category).toLowerCase().includes(curQ);
+}
+function renderInstalled(){
+  const list = DATA.skills.filter(matchInstalled);
+  $('#empty').style.display = list.length ? 'none' : 'block';
+  $('#grid').innerHTML = list.map(s=>`
+    <div class="card clickable" data-i="${DATA.skills.indexOf(s)}">
+      <div class="row1"><span class="badge">${s.category}</span>${s.description_zh?'<span class="badge tr">中</span>':''}${s.origin?`<span class="badge gray">市场</span>`:''}</div>
+      <div class="cname">${esc(s.name)}</div>
+      <div class="cdesc">${esc(disp(s))||'<i>（无简介）</i>'}</div>
+      <div class="foot"><span>📄 ${s.files} 个文件</span><span>${fmtSize(s.size)}</span>${s.version?`<span>v${esc(s.version)}</span>`:''}${s.mtime?`<span>更新 ${s.mtime}</span>`:''}</div>
+    </div>`).join('');
+  $('#grid').onclick = e=>{
+    const card = e.target.closest('.card'); if(!card) return;
+    openDetail(DATA.skills[+card.dataset.i]);
+  };
+}
+
+function openDetail(s){
+  const deps = Object.entries(s.dependency||{}).map(([lang,arr])=>
+    arr.length?`<dt>${esc(lang)} 依赖</dt><dd>${arr.map(d=>`<span class="dep">${esc(d)}</span>`).join('')}</dd>`:'').join('');
+  const tree = (s.top||[]).map(t=>`<div>${t.dir?'<span class="d">📁':'📄'} ${esc(t.name)}${t.dir?'</span>':''}</div>`).join('');
+  const loadPrompt = `请加载技能「${s.name}」（位于 ${s.path}），严格按其指令完成我接下来的需求：`;
+  const zh = !!s.description_zh;
+  $('#panel').innerHTML = `
+    <button class="close" onclick="closePanel()">✕</button>
+    <h2>${esc(s.name)}</h2>
+    <div style="margin-top:6px"><span class="badge">${s.category}</span>${zh?'<span class="badge tr">中文简介</span>':''}${s.origin?`<span class="badge gray">来自 ${esc(s.origin.source)}</span>`:''}</div>
+    <p class="desc">${esc(disp(s))||'<i>（无简介）</i>'}</p>
+    ${zh?`<button class="toggle-orig" onclick="var o=this.nextElementSibling;o.classList.toggle('show');this.textContent=o.classList.contains('show')?'隐藏英文原文':'查看英文原文'">查看英文原文</button>
+    <div class="orig">${esc(s.description)}</div>`:''}
+    <dl class="kv">
+      ${s.version?`<dt>版本</dt><dd>${esc(s.version)}</dd>`:''}
+      ${s.author?`<dt>作者</dt><dd>${esc(s.author)}</dd>`:''}
+      ${s.license?`<dt>协议</dt><dd>${esc(s.license)}</dd>`:''}
+      ${deps||''}
+      <dt>规模</dt><dd>${s.files} 个文件 · ${fmtSize(s.size)} · 更新于 ${s.mtime}</dd>
+      <dt>路径</dt><dd><code>${esc(s.path)}</code></dd>
+    </dl>
+    <div style="font-size:13px;color:var(--sub)">目录内容</div>
+    <div class="tree">${tree}</div>
+    <div class="btns">
+      <button class="btn primary" onclick="copyText(${JSON.stringify(loadPrompt).replace(/"/g,'&quot;')})">📋 复制调用提示词</button>
+      <button class="btn" onclick="copyText('${esc(s.path)}')">复制路径</button>
+    </div>`;
+  $('#overlay').classList.add('show');
+}
+function closePanel(){ $('#overlay').classList.remove('show'); }
+function copyText(text){
+  (navigator.clipboard?navigator.clipboard.writeText(text):Promise.reject())
+    .then(()=>toast('已复制 ✓')).catch(()=>{
+      const ta=document.createElement('textarea'); ta.value=text; document.body.appendChild(ta);
+      ta.select(); document.execCommand('copy'); ta.remove(); toast('已复制 ✓');
+    });
+}
+
+// ---------- 技能市场 ----------
+function renderSourceChips(){
+  $('#mk-chips').innerHTML = SOURCES.map(s=>
+    `<span class="chip${s.id===mkSource?' on':''}" data-src="${s.id}" title="${esc(s.desc)}">${s.name}</span>`).join('');
+  $('#mk-chips').onclick = e=>{
+    const chip = e.target.closest('.chip'); if(!chip) return;
+    mkSource = chip.dataset.src; mkPath=''; mkQuery=''; mkRepo=''; mkRef='';
+    $('#mk-q').value='';
+    renderSourceChips(); loadMarket();
+  };
+  $('#mk-custom').style.display = mkSource==='github' ? 'flex' : 'none';
+  const isClaw = mkSource==='clawdhub';
+  $('#mk-q').placeholder = isClaw ? '搜索 ClawdHub 社区技能（如 pdf、ppt、web）…' : '过滤当前目录列表…';
+}
+function mkCrumb(repo, branch, path){
+  if(mkSource==='clawdhub'){ $('#mk-crumb').textContent = 'ClawdHub：输入关键词搜索后安装'; return; }
+  const parts = path ? path.split('/') : [];
+  let html = `<a data-p="">${esc(repo)}</a>` + (branch?` @ ${esc(branch)}`:'');
+  let acc = '';
+  for (const p of parts){ acc += (acc?'/':'')+p; html += ` / <a data-p="${esc(acc)}">${esc(p)}</a>`; }
+  $('#mk-crumb').innerHTML = html;
+  $('#mk-crumb').querySelectorAll('a').forEach(a=>a.onclick=()=>{ mkPath=a.dataset.p; loadMarket(); });
+}
+async function loadMarket(){
+  const grid = $('#mk-grid');
+  grid.innerHTML = '<div class="empty">加载中…</div>'; $('#mk-empty').style.display='none';
+  try {
+    if (mkSource==='clawdhub'){
+      const d = await api(`/market/search?source=clawdhub&q=${encodeURIComponent(mkQuery||'skill')}`);
+      mkCrumb(); renderClaw(d.items||[]);
+      grid.dataset.loaded = '1';
+    } else {
+      const params = new URLSearchParams({source: mkSource});
+      if (mkSource==='github'){ if(mkRepo) params.set('repo', mkRepo); if(mkRef) params.set('ref', mkRef); }
+      params.set('path', mkPath||'');
+      if (mkQuery) params.set('q', mkQuery);
+      const d = await api('/market/list?'+params.toString());
+      mkCrumb(d.repo, d.branch, d.path);
+      renderGh(d.items||[]);
+      grid.dataset.loaded = '1';
+    }
+  } catch (e) {
+    grid.innerHTML = '';
+    $('#mk-empty').style.display='block';
+    $('#mk-empty').textContent = '加载失败：' + (e.message||e);
+  }
+}
+function renderGh(items){
+  const have = installedNames();
+  const cards = items.map(it=>{
+    if (it.type==='file') return '';
+    const norm = it.name.toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,'');
+    const installed = it.isSkill && have.has(norm);
+    return `<div class="card">
+      <div class="row1"><span class="badge">${it.isSkill?'技能':'目录'}</span><span class="cname">${esc(it.name)}</span></div>
+      <div class="cdesc">${it.isSkill?'含 SKILL.md，可安装':'子目录，点击进入'} · ${it.files||0} 项</div>
+      <div class="foot">
+        ${it.isSkill
+          ? `<button class="btn primary small" data-install="${esc(it.path)}" data-name="${esc(it.name)}">${installed?'重新安装':'📥 安装'}</button>`
+          : `<button class="btn small" data-nav="${esc(it.path)}">进入 →</button>`}
+      </div>
+    </div>`;
+  }).filter(Boolean);
+  $('#mk-grid').innerHTML = cards.join('') || '<div class="empty">此目录为空</div>';
+  $('#mk-empty').style.display = 'none';
+  $('#mk-grid').onclick = e=>{
+    const nav = e.target.closest('[data-nav]');
+    if (nav){ mkPath = nav.dataset.nav; loadMarket(); return; }
+    const btn = e.target.closest('[data-install]');
+    if (btn) doInstall({ kind:'github', repo: (mkSource==='anthropics'?'anthropics/skills':mkRepo), ref: mkRef||undefined, subPath: btn.dataset.install, name: btn.dataset.name }, btn);
+  };
+}
+function renderClaw(items){
+  const have = installedNames();
+  $('#mk-grid').innerHTML = items.map(it=>{
+    const local = it.slug && have.has(String(it.slug).toLowerCase());
+    return `<div class="card">
+      <div class="row1"><span class="badge">技能</span>${it.featured?'<span class="badge tr">精选</span>':''}<span class="cname">${esc(it.name)}</span></div>
+      <div class="cdesc">${esc(it.summary)||'<i>（无简介）</i>'}</div>
+      <div class="foot"><span>⬇ ${it.downloads||0} 次安装</span><span style="font-size:11.5px">${esc(it.reference)}</span>
+        <button class="btn primary small" data-claw="${esc(it.slug)}" data-owner="${esc(it.ownerHandle||'')}">${local?'重新安装':'📥 安装'}</button></div>
+    </div>`;
+  }).join('') || '<div class="empty">没有搜索结果，换个关键词</div>';
+  $('#mk-empty').style.display = 'none';
+  $('#mk-grid').onclick = e=>{
+    const btn = e.target.closest('[data-claw]');
+    if (btn) doInstall({ kind:'clawdhub', slug: btn.dataset.claw, ownerHandle: btn.dataset.owner || undefined }, btn);
+  };
+}
+async function doInstall(payload, btn){
+  const old = btn.textContent;
+  btn.disabled = true; btn.textContent = '安装中…';
+  try {
+    const r = await api('/market/install', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload) });
+    toast(`✅ 已安装「${r.name}」到 ~/.dsh/skills`);
+  } catch (e) {
+    if (e.status===409 && e.data && e.data.needsForce){
+      if (confirm(`技能「${e.data.name}」已存在，覆盖安装？`)){
+        btn.disabled=false; btn.textContent=old;
+        return doInstall({...payload, force:true}, btn);
+      }
+    } else { toast('❌ 安装失败：' + (e.message||e)); }
+  }
+  btn.disabled = false; btn.textContent = old;
+  try { DATA = await api('/index'); $('#stat').textContent = `共 ${DATA.total} 个技能`; renderInstalled(); } catch {}
+}
+
+init();
+</script>
+</body>
+</html>

@@ -1,0 +1,10 @@
+# dsh-plugin-skills-manager bundle patch — 把插件挂入 profile 的 bundle 名册。
+#
+# 服务端（exports "."）在 DSH webServer 上注册 /api/skills-manager/* 路由；
+# 浏览器端（exports "./client"，由 dsh.client 声明）在设置页注册「技能管理台」分区。
+#
+# 安装：cd ~/.dsh/profiles/desktop && pnpm add link:<本目录>，并把本包名加入
+# dsh.profile.bundles（install.sh 已自动完成）。
+- insert:
+    - id: skills-manager
+      name: dsh-plugin-skills-manager

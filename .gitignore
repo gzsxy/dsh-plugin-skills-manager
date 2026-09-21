@@ -1,0 +1,6 @@
+.DS_Store
+node_modules/
+incident/
+*.log
+NO_CLIENT
+pnpm-lock.yaml

@@ -1,5 +1,5 @@
 // dsh-plugin-skills-manager — 浏览器端
-// 功能：① 设置页「技能管理台」分区 ② 对话框旁 ⚡ 技能选择按钮（插入 /技能名）
+// 功能：① 设置页「技能管理台」分区 ② 对话框旁 ⚡ 技能选择按钮（通过 inputActions.setDraft 写入 /技能名）
 // 设计原则：任何异常都被吞掉并仅打印 console 警告，绝不影响 DSH 界面本身启动；
 // 若加载时 ModuleLoader 尚未就绪，自动重试等待（最多 30 秒）。
 function __smRegister() {
@@ -35,7 +35,10 @@ function __smRegister() {
         }
 
         // ---------- ⚡ 对话框旁技能选择按钮 ----------
-        function SkillPickerButton() {
+        // 官方契约（与 dsh-any-skills 一致）：
+        //   props.input.draft / props.useInput  → 读当前草稿
+        //   props.inputActions.setDraft(text)   → 写回草稿（由应用管理状态，勿直接操作 DOM）
+        function SkillPickerButton(props) {
           const [open, setOpen] = React.useState(false);
           const [skills, setSkills] = React.useState(null);
           const [q, setQ] = React.useState('');
@@ -58,37 +61,24 @@ function __smRegister() {
               .catch(() => setSkills([]));
           };
 
-          function findComposerTextarea(fromEl) {
-            let el = fromEl;
-            while (el && el !== document.documentElement) {
+          function readDraft() {
+            if (props.input !== void 0 && typeof props.input.draft === 'string') return props.input.draft;
+            if (typeof props.useInput === 'function') {
               try {
-                const card = el.querySelector('[data-composer-card]');
-                if (card) { const ta = card.querySelector('textarea'); if (ta) return ta; }
+                const state = props.useInput(s => s);
+                if (state !== void 0 && typeof state.draft === 'string') return state.draft;
               } catch (e) { /* ignore */ }
-              el = el.parentElement;
             }
-            const tas = [...document.querySelectorAll('textarea')].filter(t => !t.disabled && t.offsetParent !== null);
-            return tas.length ? tas[tas.length - 1] : null;
+            return '';
           }
-          function insert(name) {
-            const text = '/' + name + ' ';
-            const ta = findComposerTextarea(btnRef.current)
-              || (document.querySelector('[data-composer-card]') && document.querySelector('[data-composer-card]').querySelector('textarea'))
-              || document.querySelector('main textarea')
-              || document.querySelector('textarea');
-            if (ta) {
-              try {
-                const setter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value').set;
-                const cur = ta.value || '';
-                setter.call(ta, cur && cur.trim().length ? cur.replace(/\s*$/, '') + ' ' + text : text);
-                ta.dispatchEvent(new Event('input', { bubbles: true }));
-                ta.focus();
-                try { ta.selectionStart = ta.selectionEnd = ta.value.length; } catch (e) { /* ignore */ }
-              } catch (e) {
-                try { navigator.clipboard.writeText(text); } catch (e2) { /* ignore */ }
-              }
+          function pick(name) {
+            const draft = readDraft();
+            const sep = draft === '' || draft.endsWith(' ') || draft.endsWith('\n') ? '' : ' ';
+            const text = draft + sep + '/' + name + ' ';
+            if (typeof props.inputActions?.setDraft === 'function') {
+              props.inputActions.setDraft(text);
             } else {
-              try { navigator.clipboard.writeText(text); } catch (e) { /* ignore */ }
+              try { navigator.clipboard.writeText(text); console.warn(`[${NS}] setDraft 不可用，/name 已复制`); } catch (e) { /* ignore */ }
             }
             setOpen(false);
           }
@@ -127,7 +117,7 @@ function __smRegister() {
                   ? React.createElement('div', { style: { color: '#9aa1b0', padding: '10px' } }, '没有匹配的技能')
                   : filtered.map(s => React.createElement('div', {
                     key: s.folder,
-                    onClick: () => insert(s.name),
+                    onClick: () => pick(s.name),
                     style: { padding: '7px 10px', borderRadius: '8px', cursor: 'pointer', display: 'flex', gap: '8px', alignItems: 'baseline' },
                     onMouseEnter: e => { e.currentTarget.style.background = '#f0f4ff'; },
                     onMouseLeave: e => { e.currentTarget.style.background = ''; },
@@ -135,7 +125,7 @@ function __smRegister() {
                     React.createElement('code', { style: { fontWeight: 600, fontSize: '12.5px' } }, '/' + s.name),
                     React.createElement('span', { style: { color: '#69707f', fontSize: '12px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 } },
                       (s.description_zh || s.description || '').slice(0, 60)))))),
-          );
+            );
         }
 
         function apply(ctx) {
